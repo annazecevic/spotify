@@ -35,7 +35,7 @@ func main() {
 
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, cfg.JWTSecret)
 
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -61,11 +61,15 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
+	router.GET("/internal/validate", userHandler.ValidateToken)
+
 	api := router.Group("/api/v1")
 	{
 		users := api.Group("/users")
 		{
 			users.POST("/register", userHandler.Register)
+			users.POST("/login", userHandler.Login)
+			users.GET("/me", userHandler.Me)
 		}
 	}
 
