@@ -1,20 +1,27 @@
 package handler
 
 import (
+	"fmt"
+	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/annazecevic/user-service/dto"
 	"github.com/annazecevic/user-service/service"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type UserHandler struct {
 	userService service.UserService
+	jwtSecret   string
 }
 
-func NewUserHandler(userService service.UserService) *UserHandler {
+func NewUserHandler(userService service.UserService, jwtSecret string) *UserHandler {
 	return &UserHandler{
 		userService: userService,
+		jwtSecret:   jwtSecret,
 	}
 }
 
@@ -32,4 +39,124 @@ func (h *UserHandler) Register(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, user)
+}
+
+func (h *UserHandler) Login(c *gin.Context) {
+	var req dto.LoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.userService.Authenticate(c.Request.Context(), req.Email, req.Password)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"sub":   user.ID,
+		"email": user.Email,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(h.jwtSecret))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.LoginResponse{
+		Token: tokenString,
+		User: &dto.UserResponse{
+			ID:        user.ID,
+			Name:      user.Name,
+			LastName:  user.LastName,
+			Email:     user.Email,
+			Role:      user.Role,
+			Confirmed: user.Confirmed,
+			CreatedAt: user.CreatedAt,
+		},
+	})
+}
+
+func (h *UserHandler) ValidateToken(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	tokenString := parts[1]
+
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(h.jwtSecret), nil
+	})
+	if err != nil || !token.Valid {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	sub, ok := claims["sub"].(string)
+	if !ok || sub == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	c.Header("X-User-ID", sub)
+	log.Printf("ValidateToken: valid token for user_id=%s\n", sub)
+
+	c.JSON(http.StatusOK, gin.H{"user_id": sub})
+}
+
+func (h *UserHandler) Me(c *gin.Context) {
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 {
+				tokenString := parts[1]
+				token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+					if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+						return nil, fmt.Errorf("unexpected signing method")
+					}
+					return []byte(h.jwtSecret), nil
+				})
+				if err == nil && token.Valid {
+					if claims, ok := token.Claims.(jwt.MapClaims); ok {
+						if sub, ok := claims["sub"].(string); ok && sub != "" {
+							userID = sub
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user id"})
+		return
+	}
+	userResp, err := h.userService.GetByID(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, userResp)
 }

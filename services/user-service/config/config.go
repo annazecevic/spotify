@@ -12,6 +12,7 @@ type Config struct {
 	MongoDatabase string
 	ServerPort    string
 	Environment   string
+	JWTSecret     string
 }
 
 func LoadConfig() *Config {
@@ -24,6 +25,7 @@ func LoadConfig() *Config {
 		MongoDatabase: getEnv("MONGO_DATABASE", "spotify_users"),
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		Environment:   getEnv("ENVIRONMENT", "development"),
+		JWTSecret:     getEnv("JWT_SECRET", "secret"),
 	}
 }
 

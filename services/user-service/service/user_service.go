@@ -15,6 +15,8 @@ import (
 
 type UserService interface {
 	Register(ctx context.Context, req *dto.RegisterUserRequest) (*dto.UserResponse, error)
+	Authenticate(ctx context.Context, email, password string) (*domain.User, error)
+	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
 }
 
 type userService struct {
@@ -55,6 +57,36 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &dto.UserResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		LastName:  user.LastName,
+		Email:     user.Email,
+		Role:      user.Role,
+		Confirmed: user.Confirmed,
+		CreatedAt: user.CreatedAt,
+	}, nil
+}
+
+func (s *userService) Authenticate(ctx context.Context, email, password string) (*domain.User, error) {
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	return user, nil
+}
+
+func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, id)
+	if err != nil {
 		return nil, err
 	}
 
