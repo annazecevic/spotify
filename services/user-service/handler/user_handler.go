@@ -48,7 +48,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.Authenticate(c.Request.Context(), req.Email, req.Password)
+	user, err := h.userService.Authenticate(c.Request.Context(), req.Identifier, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
@@ -72,6 +72,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 			ID:        user.ID,
 			Name:      user.Name,
 			LastName:  user.LastName,
+			Username:  user.Username,
 			Email:     user.Email,
 			Role:      user.Role,
 			Confirmed: user.Confirmed,

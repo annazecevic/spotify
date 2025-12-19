@@ -5,6 +5,7 @@ type User struct {
 	Name      string `bson:"name"`
 	LastName  string `bson:"last_name"`
 	Email     string `bson:"email"`
+	Username  string `bson:"username"`
 	Password  string `bson:"password"`
 	Confirmed bool   `bson:"confirmed"`
 	CreatedAt int64  `bson:"created_at"`
