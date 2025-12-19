@@ -15,7 +15,7 @@ import (
 
 type UserService interface {
 	Register(ctx context.Context, req *dto.RegisterUserRequest) (*dto.UserResponse, error)
-	Authenticate(ctx context.Context, email, password string) (*domain.User, error)
+	Authenticate(ctx context.Context, identifier, password string) (*domain.User, error)
 	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
 }
 
@@ -38,6 +38,14 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 		return nil, errors.New("user with this email already exists")
 	}
 
+	existingByUsername, err := s.userRepo.FindByUsername(ctx, req.Username)
+	if err != nil && err != mongo.ErrNoDocuments {
+		return nil, err
+	}
+	if existingByUsername != nil {
+		return nil, errors.New("user with this username already exists")
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -48,6 +56,7 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 		ID:        uuid.New().String(),
 		Name:      req.Name,
 		LastName:  req.LastName,
+		Username:  req.Username,
 		Email:     req.Email,
 		Password:  string(hashedPassword),
 		Confirmed: false,
@@ -64,6 +73,7 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 		ID:        user.ID,
 		Name:      user.Name,
 		LastName:  user.LastName,
+		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
 		Confirmed: user.Confirmed,
@@ -71,11 +81,17 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 	}, nil
 }
 
-func (s *userService) Authenticate(ctx context.Context, email, password string) (*domain.User, error) {
-	user, err := s.userRepo.FindByEmail(ctx, email)
+func (s *userService) Authenticate(ctx context.Context, identifier, password string) (*domain.User, error) {
+	user, err := s.userRepo.FindByEmail(ctx, identifier)
 	if err != nil {
-		return nil, err
-	}
+        if err != mongo.ErrNoDocuments {
+            return nil, err
+        }
+        user, err = s.userRepo.FindByUsername(ctx, identifier)
+        if err != nil {
+            return nil, err
+        }
+    }
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
@@ -94,6 +110,7 @@ func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse
 		ID:        user.ID,
 		Name:      user.Name,
 		LastName:  user.LastName,
+		Username:  user.Username,
 		Email:     user.Email,
 		Role:      user.Role,
 		Confirmed: user.Confirmed,
