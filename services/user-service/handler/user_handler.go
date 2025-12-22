@@ -57,6 +57,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 	claims := jwt.MapClaims{
 		"sub":   user.ID,
 		"email": user.Email,
+		"role":  user.Role,
 		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -119,6 +120,10 @@ func (h *UserHandler) ValidateToken(c *gin.Context) {
 	}
 
 	c.Header("X-User-ID", sub)
+	// if role present in token claims, forward it as header for auth proxy
+	if role, ok := claims["role"].(string); ok && role != "" {
+		c.Header("X-User-Role", role)
+	}
 	log.Printf("ValidateToken: valid token for user_id=%s\n", sub)
 
 	c.JSON(http.StatusOK, gin.H{"user_id": sub})
