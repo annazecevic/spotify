@@ -15,6 +15,10 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*domain.User, error)
 	FindByUsername(ctx context.Context, username string) (*domain.User, error)
 	FindByID(ctx context.Context, id string) (*domain.User, error)
+	FindByConfirmationToken(ctx context.Context, token string) (*domain.User, error)
+	FindByPasswordResetToken(ctx context.Context, token string) (*domain.User, error)
+	UpdateConfirmation(ctx context.Context, userID string) error
+	Update(ctx context.Context, user *domain.User) error
 }
 
 type userRepository struct {
@@ -85,4 +89,57 @@ func (r *userRepository) FindByID(ctx context.Context, id string) (*domain.User,
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *userRepository) FindByConfirmationToken(ctx context.Context, token string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	err := r.collection.FindOne(ctx, bson.M{"confirmation_token": token}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) FindByPasswordResetToken(ctx context.Context, token string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	err := r.collection.FindOne(ctx, bson.M{"password_reset_token": token}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *userRepository) UpdateConfirmation(ctx context.Context, userID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"confirmed":          true,
+			"confirmation_token": "",
+			"token_expires_at":   0,
+			"updated_at":         time.Now().Unix(),
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"id": userID}, update)
+	return err
+}
+
+func (r *userRepository) Update(ctx context.Context, user *domain.User) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": user,
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"id": user.ID}, update)
+	return err
 }

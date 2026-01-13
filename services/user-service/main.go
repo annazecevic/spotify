@@ -9,6 +9,7 @@ import (
 	"github.com/annazecevic/user-service/handler"
 	"github.com/annazecevic/user-service/repository"
 	"github.com/annazecevic/user-service/service"
+	"github.com/annazecevic/user-service/utils"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -33,8 +34,17 @@ func main() {
 
 	db := client.Database(cfg.MongoDatabase)
 
+	emailService := utils.NewEmailService(
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		cfg.SMTPUsername,
+		cfg.SMTPPassword,
+		cfg.SMTPFrom,
+		cfg.AppURL,
+	)
+
 	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo)
+	userService := service.NewUserService(userRepo, emailService)
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecret)
 
 	if cfg.Environment == "production" {
@@ -69,6 +79,11 @@ func main() {
 		{
 			users.POST("/register", userHandler.Register)
 			users.POST("/login", userHandler.Login)
+			users.POST("/verify-otp", userHandler.VerifyOTP)
+			users.GET("/confirm", userHandler.ConfirmEmail)
+			users.POST("/confirm", userHandler.ConfirmEmail)
+			users.POST("/password-reset/request", userHandler.RequestPasswordReset)
+			users.POST("/password-reset/reset", userHandler.ResetPassword)
 			users.GET("/me", userHandler.Me)
 		}
 	}
