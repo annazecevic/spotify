@@ -50,35 +50,18 @@ func (h *UserHandler) Login(c *gin.Context) {
 
 	user, err := h.userService.Authenticate(c.Request.Context(), req.Identifier, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	claims := jwt.MapClaims{
-		"sub":   user.ID,
-		"email": user.Email,
-		"role":  user.Role,
-		"exp":   time.Now().Add(24 * time.Hour).Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(h.jwtSecret))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+	if err := h.userService.SendOTP(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send OTP: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.LoginResponse{
-		Token: tokenString,
-		User: &dto.UserResponse{
-			ID:        user.ID,
-			Name:      user.Name,
-			LastName:  user.LastName,
-			Username:  user.Username,
-			Email:     user.Email,
-			Role:      user.Role,
-			Confirmed: user.Confirmed,
-			CreatedAt: user.CreatedAt,
-		},
+	c.JSON(http.StatusOK, gin.H{
+		"message": "OTP sent to your email. Please verify to complete login.",
+		"email":   user.Email,
 	})
 }
 
@@ -88,7 +71,7 @@ func (h *UserHandler) ValidateToken(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
-
+ 
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 {
 		c.AbortWithStatus(http.StatusUnauthorized)
@@ -120,7 +103,6 @@ func (h *UserHandler) ValidateToken(c *gin.Context) {
 	}
 
 	c.Header("X-User-ID", sub)
-	// if role present in token claims, forward it as header for auth proxy
 	if role, ok := claims["role"].(string); ok && role != "" {
 		c.Header("X-User-Role", role)
 	}
@@ -165,4 +147,108 @@ func (h *UserHandler) Me(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, userResp)
+}
+
+func (h *UserHandler) ConfirmEmail(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		var req dto.ConfirmEmailRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "token is required"})
+			return
+		}
+		token = req.Token
+	}
+
+	if err := h.userService.ConfirmEmail(c.Request.Context(), token); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email confirmed successfully. You can now login."})
+}
+
+func (h *UserHandler) RequestPasswordReset(c *gin.Context) {
+	var req dto.RequestPasswordResetRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.userService.RequestPasswordReset(c.Request.Context(), req.Email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password reset request"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "If an account with that email exists, a password reset link has been sent."})
+}
+
+func (h *UserHandler) ResetPassword(c *gin.Context) {
+	var req dto.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.userService.ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully. You can now login with your new password."})
+}
+
+func (h *UserHandler) VerifyOTP(c *gin.Context) {
+	var req dto.VerifyOTPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := h.userService.VerifyOTP(c.Request.Context(), req.Email, req.OTP)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"sub":   user.ID,
+		"email": user.Email,
+		"role":  user.Role,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(h.jwtSecret))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		return
+	}
+
+	var passwordExpiresSoon bool
+	var passwordExpiresInDays int
+	if user.PasswordExpiresAt > 0 {
+		now := time.Now().Unix()
+		daysUntilExpiration := int((user.PasswordExpiresAt - now) / 86400)
+		if daysUntilExpiration <= 7 && daysUntilExpiration >= 0 {
+			passwordExpiresSoon = true
+			passwordExpiresInDays = daysUntilExpiration
+		}
+	}
+
+	c.JSON(http.StatusOK, dto.LoginResponse{
+		Token: tokenString,
+		User: &dto.UserResponse{
+			ID:                user.ID,
+			Name:              user.Name,
+			LastName:          user.LastName,
+			Username:          user.Username,
+			Email:             user.Email,
+			Role:              user.Role,
+			Confirmed:         user.Confirmed,
+			CreatedAt:         user.CreatedAt,
+			PasswordExpiresAt: user.PasswordExpiresAt,
+		},
+		PasswordExpiresSoon:   passwordExpiresSoon,
+		PasswordExpiresInDays: passwordExpiresInDays,
+	})
 }

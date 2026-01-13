@@ -13,6 +13,12 @@ type Config struct {
 	ServerPort    string
 	Environment   string
 	JWTSecret     string
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUsername  string
+	SMTPPassword  string
+	SMTPFrom      string
+	AppURL        string
 }
 
 func LoadConfig() *Config {
@@ -26,6 +32,12 @@ func LoadConfig() *Config {
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		Environment:   getEnv("ENVIRONMENT", "development"),
 		JWTSecret:     getEnv("JWT_SECRET", "secret"),
+		SMTPHost:      getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:      getEnv("SMTP_PORT", "587"),
+		SMTPUsername:  getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:      getEnv("SMTP_FROM", "noreply@spotify.com"),
+		AppURL:        getEnv("APP_URL", "http://localhost:3000"),
 	}
 }
 

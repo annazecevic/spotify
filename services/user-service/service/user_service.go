@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/annazecevic/user-service/domain"
 	"github.com/annazecevic/user-service/dto"
 	"github.com/annazecevic/user-service/repository"
+	"github.com/annazecevic/user-service/utils"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/mongo"
 	"golang.org/x/crypto/bcrypt"
@@ -17,19 +19,30 @@ type UserService interface {
 	Register(ctx context.Context, req *dto.RegisterUserRequest) (*dto.UserResponse, error)
 	Authenticate(ctx context.Context, identifier, password string) (*domain.User, error)
 	GetByID(ctx context.Context, id string) (*dto.UserResponse, error)
+	ConfirmEmail(ctx context.Context, token string) error
+	RequestPasswordReset(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, token, newPassword string) error
+	SendOTP(ctx context.Context, user *domain.User) error
+	VerifyOTP(ctx context.Context, email, otpCode string) (*domain.User, error)
 }
 
 type userService struct {
-	userRepo repository.UserRepository
+	userRepo     repository.UserRepository
+	emailService utils.EmailService
 }
 
-func NewUserService(userRepo repository.UserRepository) UserService {
+func NewUserService(userRepo repository.UserRepository, emailService utils.EmailService) UserService {
 	return &userService{
-		userRepo: userRepo,
+		userRepo:     userRepo,
+		emailService: emailService,
 	}
 }
 
 func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest) (*dto.UserResponse, error) {
+	if err := utils.ValidatePasswordStrength(req.Password); err != nil {
+		return nil, err
+	}
+
 	existingUser, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil && err != mongo.ErrNoDocuments {
 		return nil, err
@@ -52,32 +65,45 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 	}
 
 	now := time.Now().Unix()
+	confirmationToken := utils.GenerateConfirmationToken()
+	tokenExpiration := time.Now().Add(24 * time.Hour).Unix()
+	passwordExpiration := time.Now().AddDate(0, 0, 90).Unix()
+
 	user := &domain.User{
-		ID:        uuid.New().String(),
-		Name:      req.Name,
-		LastName:  req.LastName,
-		Username:  req.Username,
-		Email:     req.Email,
-		Password:  string(hashedPassword),
-		Confirmed: false,
-		CreatedAt: now,
-		UpdatedAt: now,
-		Role:      "user",
+		ID:                uuid.New().String(),
+		Name:              req.Name,
+		LastName:          req.LastName,
+		Username:          req.Username,
+		Email:             req.Email,
+		Password:          string(hashedPassword),
+		Confirmed:         false,
+		ConfirmationToken: confirmationToken,
+		TokenExpiresAt:    tokenExpiration,
+		PasswordChangedAt: now,
+		PasswordExpiresAt: passwordExpiration,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		Role:              "user",
 	}
 
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
 
+	if err := s.emailService.SendConfirmationEmail(user.Email, user.Name, confirmationToken); err != nil {
+		fmt.Printf("Warning: Failed to send confirmation email: %v\n", err)
+	}
+
 	return &dto.UserResponse{
-		ID:        user.ID,
-		Name:      user.Name,
-		LastName:  user.LastName,
-		Username:  user.Username,
-		Email:     user.Email,
-		Role:      user.Role,
-		Confirmed: user.Confirmed,
-		CreatedAt: user.CreatedAt,
+		ID:                user.ID,
+		Name:              user.Name,
+		LastName:          user.LastName,
+		Username:          user.Username,
+		Email:             user.Email,
+		Role:              user.Role,
+		Confirmed:         user.Confirmed,
+		CreatedAt:         user.CreatedAt,
+		PasswordExpiresAt: user.PasswordExpiresAt,
 	}, nil
 }
 
@@ -93,8 +119,16 @@ func (s *userService) Authenticate(ctx context.Context, identifier, password str
         }
     }
 
+	if !user.Confirmed {
+		return nil, errors.New("email not confirmed. Please check your email for confirmation link")
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return nil, errors.New("invalid credentials")
+	}
+
+	if user.PasswordExpiresAt > 0 && time.Now().Unix() > user.PasswordExpiresAt {
+		return nil, errors.New("password has expired. Please reset your password")
 	}
 
 	return user, nil
@@ -107,13 +141,149 @@ func (s *userService) GetByID(ctx context.Context, id string) (*dto.UserResponse
 	}
 
 	return &dto.UserResponse{
-		ID:        user.ID,
-		Name:      user.Name,
-		LastName:  user.LastName,
-		Username:  user.Username,
-		Email:     user.Email,
-		Role:      user.Role,
-		Confirmed: user.Confirmed,
-		CreatedAt: user.CreatedAt,
+		ID:                user.ID,
+		Name:              user.Name,
+		LastName:          user.LastName,
+		Username:          user.Username,
+		Email:             user.Email,
+		Role:              user.Role,
+		Confirmed:         user.Confirmed,
+		CreatedAt:         user.CreatedAt,
+		PasswordExpiresAt: user.PasswordExpiresAt,
 	}, nil
+}
+
+func (s *userService) ConfirmEmail(ctx context.Context, token string) error {
+	user, err := s.userRepo.FindByConfirmationToken(ctx, token)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return errors.New("invalid confirmation token")
+		}
+		return err
+	}
+
+	if user.TokenExpiresAt > 0 && time.Now().Unix() > user.TokenExpiresAt {
+		return errors.New("confirmation token has expired. Please request a new one")
+	}
+
+	if user.Confirmed {
+		return errors.New("email already confirmed")
+	}
+
+	return s.userRepo.UpdateConfirmation(ctx, user.ID)
+}
+
+func (s *userService) RequestPasswordReset(ctx context.Context, email string) error {
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil
+		}
+		return err
+	}
+
+	resetToken := utils.GenerateConfirmationToken()
+	tokenExpiration := time.Now().Add(1 * time.Hour).Unix()
+
+	user.PasswordResetToken = resetToken
+	user.ResetTokenExpiresAt = tokenExpiration
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, resetToken); err != nil {
+		fmt.Printf("Warning: Failed to send password reset email: %v\n", err)
+	}
+
+	return nil
+}
+
+func (s *userService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if err := utils.ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+
+	user, err := s.userRepo.FindByPasswordResetToken(ctx, token)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return errors.New("invalid or expired reset token")
+		}
+		return err
+	}
+
+	if user.ResetTokenExpiresAt > 0 && time.Now().Unix() > user.ResetTokenExpiresAt {
+		return errors.New("reset token has expired. Please request a new password reset")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().Unix()
+	user.Password = string(hashedPassword)
+	user.PasswordResetToken = ""
+	user.ResetTokenExpiresAt = 0
+	user.PasswordChangedAt = now
+	user.PasswordExpiresAt = time.Now().AddDate(0, 0, 60).Unix()
+	user.UpdatedAt = now
+
+	return s.userRepo.Update(ctx, user)
+}
+
+func (s *userService) SendOTP(ctx context.Context, user *domain.User) error {
+	otpCode, err := utils.GenerateOTP()
+	if err != nil {
+		return fmt.Errorf("failed to generate OTP: %w", err)
+	}
+
+	otpExpiresAt := time.Now().Add(10 * time.Minute).Unix()
+
+	user.OTPCode = otpCode
+	user.OTPExpiresAt = otpExpiresAt
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to save OTP: %w", err)
+	}
+
+	if err := s.emailService.SendOTPEmail(user.Email, user.Username, otpCode); err != nil {
+		return fmt.Errorf("failed to send OTP email: %w", err)
+	}
+
+	return nil
+}
+
+func (s *userService) VerifyOTP(ctx context.Context, email, otpCode string) (*domain.User, error) {
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
+	}
+
+	if user.OTPCode == "" {
+		return nil, errors.New("no OTP found. Please request a new one")
+	}
+
+	if time.Now().Unix() > user.OTPExpiresAt {
+		return nil, errors.New("OTP has expired. Please request a new one")
+	}
+
+	if user.OTPCode != otpCode {
+		return nil, errors.New("invalid OTP code")
+	}
+
+	user.OTPCode = ""
+	user.OTPExpiresAt = 0
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to clear OTP: %w", err)
+	}
+
+	return user, nil
 }
