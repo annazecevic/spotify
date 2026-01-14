@@ -39,9 +39,32 @@ func NewUserService(userRepo repository.UserRepository, emailService utils.Email
 }
 
 func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest) (*dto.UserResponse, error) {
+	// Input validation (2.18)
+	if err := utils.ValidateUsername(req.Username); err != nil {
+		return nil, err
+	}
+
+	if err := utils.ValidateName(req.Name); err != nil {
+		return nil, fmt.Errorf("invalid first name: %w", err)
+	}
+
+	if err := utils.ValidateName(req.LastName); err != nil {
+		return nil, fmt.Errorf("invalid last name: %w", err)
+	}
+
+	if err := utils.ValidateEmail(req.Email); err != nil {
+		return nil, err
+	}
+
 	if err := utils.ValidatePasswordStrength(req.Password); err != nil {
 		return nil, err
 	}
+
+	// Sanitize inputs (2.18 - XSS protection)
+	req.Name = utils.SanitizeInput(req.Name)
+	req.LastName = utils.SanitizeInput(req.LastName)
+	req.Username = utils.SanitizeInput(req.Username)
+	req.Email = utils.SanitizeInput(req.Email)
 
 	existingUser, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil && err != mongo.ErrNoDocuments {
@@ -59,6 +82,8 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 		return nil, errors.New("user with this username already exists")
 	}
 
+	// Hash password with salt (2.19 - bcrypt automatically adds salt)
+	// DefaultCost = 10, which provides good security vs performance balance
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
