@@ -7,6 +7,7 @@ import (
 
 	"github.com/annazecevic/user-service/config"
 	"github.com/annazecevic/user-service/handler"
+	"github.com/annazecevic/user-service/middleware"
 	"github.com/annazecevic/user-service/repository"
 	"github.com/annazecevic/user-service/service"
 	"github.com/annazecevic/user-service/utils"
@@ -53,11 +54,18 @@ func main() {
 
 	router := gin.Default()
 
+	// Security headers middleware (2.18 - XSS protection)
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		
+		// Security headers (2.18)
+		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
+		c.Writer.Header().Set("X-Frame-Options", "DENY")
+		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
+		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'")
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
@@ -67,24 +75,38 @@ func main() {
 		c.Next()
 	})
 
+	// Validation middleware (2.18)
+	validationMw := middleware.NewValidationMiddleware()
+	router.Use(validationMw.ValidateRequest())
+
+	// Rate limiter for general endpoints (2.17 - DoS protection)
+	generalRateLimiter := middleware.NewRateLimiter(100, 1*time.Minute)
+	router.Use(generalRateLimiter.Middleware())
+
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
 	router.GET("/internal/validate", userHandler.ValidateToken)
 
+	// Strict rate limiter for auth endpoints (2.17 - DoS protection)
+	authRateLimiter := middleware.NewRateLimiter(5, 1*time.Minute)
+
 	api := router.Group("/api/v1")
 	{
 		users := api.Group("/users")
 		{
-			users.POST("/register", userHandler.Register)
-			users.POST("/login", userHandler.Login)
-			users.POST("/verify-otp", userHandler.VerifyOTP)
+			// Public endpoints with strict rate limiting
+			users.POST("/register", authRateLimiter.Middleware(), userHandler.Register)
+			users.POST("/login", authRateLimiter.Middleware(), userHandler.Login)
+			users.POST("/verify-otp", authRateLimiter.Middleware(), userHandler.VerifyOTP)
 			users.GET("/confirm", userHandler.ConfirmEmail)
 			users.POST("/confirm", userHandler.ConfirmEmail)
-			users.POST("/password-reset/request", userHandler.RequestPasswordReset)
-			users.POST("/password-reset/reset", userHandler.ResetPassword)
-			users.GET("/me", userHandler.Me)
+			users.POST("/password-reset/request", authRateLimiter.Middleware(), userHandler.RequestPasswordReset)
+			users.POST("/password-reset/reset", authRateLimiter.Middleware(), userHandler.ResetPassword)
+			
+			// Protected endpoints (2.17 - authorization)
+			users.GET("/me", middleware.AuthMiddleware(cfg.JWTSecret), userHandler.Me)
 		}
 	}
 
