@@ -114,12 +114,6 @@ func (h *ContentHandler) CreateAlbum(c *gin.Context) {
         return
     }
 
-    // Validate year (numeric validation - 2.18)
-    if req.Released < 1900 || req.Released > 2100 {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid release year"})
-        return
-    }
-
     al := &domain.Album{ID: req.ID, Title: req.Title, Released: req.Released, Genre: req.Genre, ArtistIDs: req.ArtistIDs}
     if err := h.svc.CreateAlbum(c.Request.Context(), al); err != nil { 
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

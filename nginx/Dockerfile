@@ -3,12 +3,13 @@ FROM nginx:alpine
 # Install OpenSSL for certificate generation
 RUN apk add --no-cache openssl
 
-# Copy certificate generation script
-COPY generate-certs.sh /generate-certs.sh
-RUN chmod +x /generate-certs.sh
-
-# Generate certificates
-RUN /generate-certs.sh
+# Create SSL directory and generate certificates
+RUN mkdir -p /etc/nginx/ssl && \
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout /etc/nginx/ssl/nginx-selfsigned.key \
+      -out /etc/nginx/ssl/nginx-selfsigned.crt \
+      -subj "/C=RS/ST=Serbia/L=Belgrade/O=Spotify-Clone/CN=localhost" && \
+    openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
