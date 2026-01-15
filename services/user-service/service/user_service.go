@@ -24,6 +24,8 @@ type UserService interface {
 	ResetPassword(ctx context.Context, token, newPassword string) error
 	SendOTP(ctx context.Context, user *domain.User) error
 	VerifyOTP(ctx context.Context, email, otpCode string) (*domain.User, error)
+	RequestMagicLink(ctx context.Context, email string) error
+	VerifyMagicLink(ctx context.Context, token string) (*domain.User, error)
 }
 
 type userService struct {
@@ -135,14 +137,14 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 func (s *userService) Authenticate(ctx context.Context, identifier, password string) (*domain.User, error) {
 	user, err := s.userRepo.FindByEmail(ctx, identifier)
 	if err != nil {
-        if err != mongo.ErrNoDocuments {
-            return nil, err
-        }
-        user, err = s.userRepo.FindByUsername(ctx, identifier)
-        if err != nil {
-            return nil, err
-        }
-    }
+		if err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+		user, err = s.userRepo.FindByUsername(ctx, identifier)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	if !user.Confirmed {
 		return nil, errors.New("email not confirmed. Please check your email for confirmation link")
@@ -308,6 +310,75 @@ func (s *userService) VerifyOTP(ctx context.Context, email, otpCode string) (*do
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("failed to clear OTP: %w", err)
+	}
+
+	return user, nil
+}
+
+func (s *userService) RequestMagicLink(ctx context.Context, email string) error {
+	if err := utils.ValidateEmail(email); err != nil {
+		return err
+	}
+
+	email = utils.SanitizeInput(email)
+
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil
+		}
+		return err
+	}
+
+	if !user.Confirmed {
+		return errors.New("email not confirmed. Please confirm your email first")
+	}
+
+	magicLinkToken := utils.GenerateConfirmationToken()
+	tokenExpiration := time.Now().Add(15 * time.Minute).Unix()
+
+	user.MagicLinkToken = magicLinkToken
+	user.MagicLinkExpiresAt = tokenExpiration
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return err
+	}
+
+	if err := s.emailService.SendMagicLinkEmail(user.Email, user.Name, magicLinkToken); err != nil {
+		fmt.Printf("Warning: Failed to send magic link email: %v\n", err)
+	}
+
+	return nil
+}
+
+func (s *userService) VerifyMagicLink(ctx context.Context, token string) (*domain.User, error) {
+	user, err := s.userRepo.FindByMagicLinkToken(ctx, token)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("invalid or expired magic link")
+		}
+		return nil, err
+	}
+
+	if user.MagicLinkExpiresAt > 0 && time.Now().Unix() > user.MagicLinkExpiresAt {
+		return nil, errors.New("magic link has expired. Please request a new one")
+	}
+
+	if !user.Confirmed {
+		return nil, errors.New("email not confirmed")
+	}
+
+	if user.PasswordExpiresAt > 0 && time.Now().Unix() > user.PasswordExpiresAt {
+		return nil, errors.New("password has expired. Please reset your password")
+	}
+
+	user.MagicLinkToken = ""
+	user.MagicLinkExpiresAt = 0
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to clear magic link token: %w", err)
 	}
 
 	return user, nil

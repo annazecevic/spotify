@@ -71,7 +71,7 @@ func (h *UserHandler) ValidateToken(c *gin.Context) {
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
- 
+
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) != 2 {
 		c.AbortWithStatus(http.StatusUnauthorized)
@@ -219,6 +219,80 @@ func (h *UserHandler) VerifyOTP(c *gin.Context) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(h.jwtSecret))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		return
+	}
+
+	var passwordExpiresSoon bool
+	var passwordExpiresInDays int
+	if user.PasswordExpiresAt > 0 {
+		now := time.Now().Unix()
+		daysUntilExpiration := int((user.PasswordExpiresAt - now) / 86400)
+		if daysUntilExpiration <= 7 && daysUntilExpiration >= 0 {
+			passwordExpiresSoon = true
+			passwordExpiresInDays = daysUntilExpiration
+		}
+	}
+
+	c.JSON(http.StatusOK, dto.LoginResponse{
+		Token: tokenString,
+		User: &dto.UserResponse{
+			ID:                user.ID,
+			Name:              user.Name,
+			LastName:          user.LastName,
+			Username:          user.Username,
+			Email:             user.Email,
+			Role:              user.Role,
+			Confirmed:         user.Confirmed,
+			CreatedAt:         user.CreatedAt,
+			PasswordExpiresAt: user.PasswordExpiresAt,
+		},
+		PasswordExpiresSoon:   passwordExpiresSoon,
+		PasswordExpiresInDays: passwordExpiresInDays,
+	})
+}
+
+func (h *UserHandler) RequestMagicLink(c *gin.Context) {
+	var req dto.RequestMagicLinkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.userService.RequestMagicLink(c.Request.Context(), req.Email); err != nil {
+		c.JSON(http.StatusOK, gin.H{"message": "If an account with that email exists, a magic link has been sent."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "If an account with that email exists, a magic link has been sent."})
+}
+
+func (h *UserHandler) VerifyMagicLink(c *gin.Context) {
+	token := c.Query("token")
+	if token == "" {
+		var req dto.VerifyMagicLinkRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "token is required"})
+			return
+		}
+		token = req.Token
+	}
+
+	user, err := h.userService.VerifyMagicLink(c.Request.Context(), token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	claims := jwt.MapClaims{
+		"sub":   user.ID,
+		"email": user.Email,
+		"role":  user.Role,
+		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+	}
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := jwtToken.SignedString([]byte(h.jwtSecret))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
 		return

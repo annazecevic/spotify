@@ -14,6 +14,8 @@ type User struct {
 	ResetTokenExpiresAt int64  `bson:"reset_token_expires_at"`
 	OTPCode             string `bson:"otp_code"`
 	OTPExpiresAt        int64  `bson:"otp_expires_at"`
+	MagicLinkToken      string `bson:"magic_link_token"`
+	MagicLinkExpiresAt  int64  `bson:"magic_link_expires_at"`
 	PasswordChangedAt   int64  `bson:"password_changed_at"`
 	PasswordExpiresAt   int64  `bson:"password_expires_at"`
 	CreatedAt           int64  `bson:"created_at"`

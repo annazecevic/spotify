@@ -10,40 +10,67 @@ import (
 )
 
 type ContentService interface {
-    CreateGenre(ctx context.Context, g *domain.Genre) error
-    ListGenres(ctx context.Context) ([]*domain.Genre, error)
+	CreateGenre(ctx context.Context, g *domain.Genre) error
+	ListGenres(ctx context.Context) ([]*domain.Genre, error)
 
-    CreateArtist(ctx context.Context, a *domain.Artist) error
-    ListArtists(ctx context.Context) ([]*domain.Artist, error)
+	CreateArtist(ctx context.Context, a *domain.Artist) error
+	ListArtists(ctx context.Context) ([]*domain.Artist, error)
+	GetArtistByID(ctx context.Context, id string) (*domain.Artist, error)
+	UpdateArtist(ctx context.Context, id string, updates map[string]interface{}) error
 
-    CreateAlbum(ctx context.Context, al *domain.Album) error
-    ListAlbums(ctx context.Context) ([]*domain.Album, error)
+	CreateAlbum(ctx context.Context, al *domain.Album) error
+	ListAlbums(ctx context.Context) ([]*domain.Album, error)
 
-    CreateTrack(ctx context.Context, t *domain.Track) error
-    ListTracks(ctx context.Context) ([]*domain.Track, error)
+	CreateTrack(ctx context.Context, t *domain.Track) error
+	ListTracks(ctx context.Context) ([]*domain.Track, error)
 }
 
 type contentService struct {
-    repo repository.ContentRepository
+	repo repository.ContentRepository
 }
 
 func NewContentService(repo repository.ContentRepository) ContentService {
-    return &contentService{repo: repo}
+	return &contentService{repo: repo}
 }
 
 func (s *contentService) CreateGenre(ctx context.Context, g *domain.Genre) error {
-    return s.repo.CreateGenre(ctx, g)
+	return s.repo.CreateGenre(ctx, g)
 }
 
-func (s *contentService) ListGenres(ctx context.Context) ([]*domain.Genre, error) { return s.repo.ListGenres(ctx) }
+func (s *contentService) ListGenres(ctx context.Context) ([]*domain.Genre, error) {
+	return s.repo.ListGenres(ctx)
+}
 
-func (s *contentService) CreateArtist(ctx context.Context, a *domain.Artist) error { return s.repo.CreateArtist(ctx, a) }
+func (s *contentService) CreateArtist(ctx context.Context, a *domain.Artist) error {
+	return s.repo.CreateArtist(ctx, a)
+}
 
-func (s *contentService) ListArtists(ctx context.Context) ([]*domain.Artist, error) { return s.repo.ListArtists(ctx) }
+func (s *contentService) ListArtists(ctx context.Context) ([]*domain.Artist, error) {
+	return s.repo.ListArtists(ctx)
+}
 
-func (s *contentService) CreateAlbum(ctx context.Context, al *domain.Album) error { return s.repo.CreateAlbum(ctx, al) }
+func (s *contentService) GetArtistByID(ctx context.Context, id string) (*domain.Artist, error) {
+	artist, err := s.repo.FindArtistByID(ctx, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("artist not found")
+		}
+		return nil, err
+	}
+	return artist, nil
+}
 
-func (s *contentService) ListAlbums(ctx context.Context) ([]*domain.Album, error) { return s.repo.ListAlbums(ctx) }
+func (s *contentService) UpdateArtist(ctx context.Context, id string, updates map[string]interface{}) error {
+	return s.repo.UpdateArtist(ctx, id, updates)
+}
+
+func (s *contentService) CreateAlbum(ctx context.Context, al *domain.Album) error {
+	return s.repo.CreateAlbum(ctx, al)
+}
+
+func (s *contentService) ListAlbums(ctx context.Context) ([]*domain.Album, error) {
+	return s.repo.ListAlbums(ctx)
+}
 
 func (s *contentService) CreateTrack(ctx context.Context, t *domain.Track) error {
 	if t.AlbumID != "" {
@@ -58,4 +85,6 @@ func (s *contentService) CreateTrack(ctx context.Context, t *domain.Track) error
 	return s.repo.CreateTrack(ctx, t)
 }
 
-func (s *contentService) ListTracks(ctx context.Context) ([]*domain.Track, error) { return s.repo.ListTracks(ctx) }
+func (s *contentService) ListTracks(ctx context.Context) ([]*domain.Track, error) {
+	return s.repo.ListTracks(ctx)
+}

@@ -17,6 +17,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id string) (*domain.User, error)
 	FindByConfirmationToken(ctx context.Context, token string) (*domain.User, error)
 	FindByPasswordResetToken(ctx context.Context, token string) (*domain.User, error)
+	FindByMagicLinkToken(ctx context.Context, token string) (*domain.User, error)
 	UpdateConfirmation(ctx context.Context, userID string) error
 	Update(ctx context.Context, user *domain.User) error
 }
@@ -130,6 +131,18 @@ func (r *userRepository) UpdateConfirmation(ctx context.Context, userID string) 
 
 	_, err := r.collection.UpdateOne(ctx, bson.M{"id": userID}, update)
 	return err
+}
+
+func (r *userRepository) FindByMagicLinkToken(ctx context.Context, token string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	err := r.collection.FindOne(ctx, bson.M{"magic_link_token": token}).Decode(&user)
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (r *userRepository) Update(ctx context.Context, user *domain.User) error {

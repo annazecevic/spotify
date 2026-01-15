@@ -39,13 +39,44 @@ services:
     container_name: spotify-content-service
     ports:
       - "8081:8081"
-    environment:
-      MONGO_URI: mongodb://mongodb:27017
-      MONGO_DATABASE: content_db
-      SERVER_PORT: 8081
-      ENVIRONMENT: development
+    env_file:
+      - ./services/content-service/.env
     depends_on:
       - mongodb
+    networks:
+      - spotify-network
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: spotify-cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: spotify-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - spotify-network
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  notifications-service:
+    build:
+      context: ./services/notifications-service
+      dockerfile: Dockerfile
+    container_name: spotify-notifications-service
+    ports:
+      - "8082:8082"
+    env_file:
+      - ./services/notifications-service/.env
+    depends_on:
+      cassandra:
+        condition: service_healthy
     networks:
       - spotify-network
 
@@ -62,6 +93,7 @@ services:
     depends_on:
       - user-service
       - content-service
+      - notifications-service
     networks:
       - spotify-network
 
@@ -71,3 +103,4 @@ networks:
 
 volumes:
   mongodb_data:
+  cassandra_data:

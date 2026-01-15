@@ -9,6 +9,7 @@ type EmailService interface {
 	SendConfirmationEmail(to, username, token string) error
 	SendPasswordResetEmail(to, username, token string) error
 	SendOTPEmail(to, username, otpCode string) error
+	SendMagicLinkEmail(to, username, token string) error
 }
 
 type emailService struct {
@@ -34,7 +35,7 @@ func NewEmailService(smtpHost, smtpPort, username, password, from, appURL string
 func (e *emailService) SendConfirmationEmail(to, username, token string) error {
 	subject := "Confirm Your Email - Spotify Clone"
 	confirmURL := fmt.Sprintf("%s/confirm-email?token=%s", e.appURL, token)
-	
+
 	body := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -77,7 +78,7 @@ func (e *emailService) SendConfirmationEmail(to, username, token string) error {
 func (e *emailService) SendPasswordResetEmail(to, username, token string) error {
 	subject := "Reset Your Password - Spotify Clone"
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", e.appURL, token)
-	
+
 	body := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -126,7 +127,7 @@ func (e *emailService) SendPasswordResetEmail(to, username, token string) error 
 
 func (e *emailService) SendOTPEmail(to, username, otpCode string) error {
 	subject := "Your One-Time Password - Spotify Clone"
-	
+
 	body := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -175,6 +176,59 @@ func (e *emailService) SendOTPEmail(to, username, otpCode string) error {
 </body>
 </html>
 `, username, otpCode)
+
+	return e.sendEmail(to, subject, body)
+}
+
+func (e *emailService) SendMagicLinkEmail(to, username, token string) error {
+	subject := "Your Magic Link - Spotify Clone"
+	magicURL := fmt.Sprintf("%s/magic-link/verify?token=%s", e.appURL, token)
+
+	body := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background-color: #1DB954; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background-color: #f4f4f4; }
+        .button { display: inline-block; padding: 12px 30px; background-color: #1DB954; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+        .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 15px 0; }
+        .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 Magic Link Login</h1>
+        </div>
+        <div class="content">
+            <h2>Hi %s,</h2>
+            <p>You requested a magic link to log in to your Spotify Clone account. Click the button below to securely sign in:</p>
+            <p style="text-align: center;">
+                <a href="%s" class="button">Sign In with Magic Link</a>
+            </p>
+            <p>Or copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #1DB954;">%s</p>
+            <div class="warning">
+                <strong>⚠️ Security Notice:</strong>
+                <ul>
+                    <li>This magic link will expire in <strong>15 minutes</strong></li>
+                    <li>Never share this link with anyone</li>
+                    <li>If you didn't request this magic link, please ignore this email and secure your account</li>
+                    <li>This link can only be used once</li>
+                </ul>
+            </div>
+            <p style="margin-top: 20px;">If you're experiencing issues, please contact our support team.</p>
+        </div>
+        <div class="footer">
+            <p>© 2026 Spotify Clone. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+`, username, magicURL, magicURL)
 
 	return e.sendEmail(to, subject, body)
 }
@@ -229,5 +283,11 @@ func (m *mockEmailService) SendPasswordResetEmail(to, username, token string) er
 
 func (m *mockEmailService) SendOTPEmail(to, username, otpCode string) error {
 	fmt.Printf("\n=== OTP EMAIL ===\nTo: %s\nUsername: %s\nOTP Code: %s\n=================\n", to, username, otpCode)
+	return nil
+}
+
+func (m *mockEmailService) SendMagicLinkEmail(to, username, token string) error {
+	magicURL := fmt.Sprintf("http://localhost:3000/magic-link/verify?token=%s", token)
+	fmt.Printf("\n=== MAGIC LINK EMAIL ===\nTo: %s\nUsername: %s\nMagic Link: %s\n========================\n", to, username, magicURL)
 	return nil
 }
