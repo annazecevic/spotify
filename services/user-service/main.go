@@ -60,7 +60,7 @@ func main() {
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-		
+
 		// Security headers (2.18)
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
@@ -104,7 +104,10 @@ func main() {
 			users.POST("/confirm", userHandler.ConfirmEmail)
 			users.POST("/password-reset/request", authRateLimiter.Middleware(), userHandler.RequestPasswordReset)
 			users.POST("/password-reset/reset", authRateLimiter.Middleware(), userHandler.ResetPassword)
-			
+			users.POST("/magic-link/request", authRateLimiter.Middleware(), userHandler.RequestMagicLink)
+			users.GET("/magic-link/verify", userHandler.VerifyMagicLink)
+			users.POST("/magic-link/verify", userHandler.VerifyMagicLink)
+
 			// Protected endpoints (2.17 - authorization)
 			users.GET("/me", middleware.AuthMiddleware(cfg.JWTSecret), userHandler.Me)
 		}
