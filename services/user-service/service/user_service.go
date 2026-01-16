@@ -22,6 +22,8 @@ type UserService interface {
 	ConfirmEmail(ctx context.Context, token string) error
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, token, newPassword string) error
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
+	UpdateProfile(ctx context.Context, userID string, req *dto.UpdateProfileRequest) (*dto.UserResponse, error)
 	SendOTP(ctx context.Context, user *domain.User) error
 	VerifyOTP(ctx context.Context, email, otpCode string) (*domain.User, error)
 	RequestMagicLink(ctx context.Context, email string) error
@@ -382,4 +384,85 @@ func (s *userService) VerifyMagicLink(ctx context.Context, token string) (*domai
 	}
 
 	return user, nil
+}
+
+func (s *userService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
+		return errors.New("current password is incorrect")
+	}
+
+	if err := utils.ValidatePasswordStrength(newPassword); err != nil {
+		return err
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().Unix()
+	user.Password = string(hashedPassword)
+	user.PasswordChangedAt = now
+	user.PasswordExpiresAt = time.Now().AddDate(0, 0, 90).Unix()
+	user.UpdatedAt = now
+
+	return s.userRepo.Update(ctx, user)
+}
+
+func (s *userService) UpdateProfile(ctx context.Context, userID string, req *dto.UpdateProfileRequest) (*dto.UserResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if req.Name != "" {
+		if err := utils.ValidateName(req.Name); err != nil {
+			return nil, fmt.Errorf("invalid first name: %w", err)
+		}
+		user.Name = utils.SanitizeInput(req.Name)
+	}
+
+	if req.LastName != "" {
+		if err := utils.ValidateName(req.LastName); err != nil {
+			return nil, fmt.Errorf("invalid last name: %w", err)
+		}
+		user.LastName = utils.SanitizeInput(req.LastName)
+	}
+
+	if req.Username != "" {
+		if err := utils.ValidateUsername(req.Username); err != nil {
+			return nil, err
+		}
+		existingUser, err := s.userRepo.FindByUsername(ctx, req.Username)
+		if err != nil && err != mongo.ErrNoDocuments {
+			return nil, err
+		}
+		if existingUser != nil && existingUser.ID != userID {
+			return nil, errors.New("username is already taken")
+		}
+		user.Username = utils.SanitizeInput(req.Username)
+	}
+
+	user.UpdatedAt = time.Now().Unix()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &dto.UserResponse{
+		ID:                user.ID,
+		Name:              user.Name,
+		LastName:          user.LastName,
+		Username:          user.Username,
+		Email:             user.Email,
+		Role:              user.Role,
+		Confirmed:         user.Confirmed,
+		CreatedAt:         user.CreatedAt,
+		PasswordExpiresAt: user.PasswordExpiresAt,
+	}, nil
 }

@@ -57,3 +57,14 @@ type RequestMagicLinkRequest struct {
 type VerifyMagicLinkRequest struct {
 	Token string `json:"token" binding:"required"`
 }
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+}
+
+type UpdateProfileRequest struct {
+	Name     string `json:"name,omitempty"`
+	LastName string `json:"last_name,omitempty"`
+	Username string `json:"username,omitempty"`
+}

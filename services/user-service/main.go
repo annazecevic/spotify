@@ -56,21 +56,11 @@ func main() {
 
 	// Security headers middleware (2.18 - XSS protection)
 	router.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
 		// Security headers (2.18)
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
 
 		c.Next()
 	})
@@ -110,6 +100,8 @@ func main() {
 
 			// Protected endpoints (2.17 - authorization)
 			users.GET("/me", middleware.AuthMiddleware(cfg.JWTSecret), userHandler.Me)
+			users.PUT("/me", middleware.AuthMiddleware(cfg.JWTSecret), userHandler.UpdateProfile)
+			users.POST("/change-password", middleware.AuthMiddleware(cfg.JWTSecret), userHandler.ChangePassword)
 		}
 	}
 

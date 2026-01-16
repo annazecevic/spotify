@@ -24,7 +24,11 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 
 	g.GET("/genres", h.ListGenres)
 	g.GET("/artists", h.ListArtists)
+	g.GET("/artists/:id", h.GetArtist)
+	g.GET("/artists/:id/albums", h.GetArtistAlbums)
 	g.GET("/albums", h.ListAlbums)
+	g.GET("/albums/:id", h.GetAlbum)
+	g.GET("/albums/:id/tracks", h.GetAlbumTracks)
 	g.GET("/tracks", h.ListTracks)
 
 	g.POST("/genres", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateGenre)
@@ -75,6 +79,74 @@ func (h *ContentHandler) ListGenres(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *ContentHandler) GetArtist(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "artist id is required"})
+		return
+	}
+
+	artist, err := h.svc.GetArtistByID(c.Request.Context(), id)
+	if err != nil {
+		if err.Error() == "artist not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, artist)
+}
+
+func (h *ContentHandler) GetArtistAlbums(c *gin.Context) {
+	artistID := c.Param("id")
+	if artistID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "artist id is required"})
+		return
+	}
+
+	albums, err := h.svc.GetAlbumsByArtistID(c.Request.Context(), artistID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, albums)
+}
+
+func (h *ContentHandler) GetAlbum(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "album id is required"})
+		return
+	}
+
+	album, err := h.svc.GetAlbumByID(c.Request.Context(), id)
+	if err != nil {
+		if err.Error() == "album not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, album)
+}
+
+func (h *ContentHandler) GetAlbumTracks(c *gin.Context) {
+	albumID := c.Param("id")
+	if albumID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "album id is required"})
+		return
+	}
+
+	tracks, err := h.svc.GetTracksByAlbumID(c.Request.Context(), albumID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tracks)
 }
 
 func (h *ContentHandler) CreateArtist(c *gin.Context) {

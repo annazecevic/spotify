@@ -18,7 +18,10 @@ func NewNotificationHandler(service service.NotificationService) *NotificationHa
 }
 
 func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
-	userID := c.Query("user_id")
+	userID := c.GetHeader("X-User-ID")
+	if userID == "" {
+		userID = c.Query("user_id")
+	}
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
 		return

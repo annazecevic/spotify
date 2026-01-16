@@ -22,9 +22,11 @@ type ContentRepository interface {
 	CreateAlbum(ctx context.Context, al *domain.Album) error
 	ListAlbums(ctx context.Context) ([]*domain.Album, error)
 	FindAlbumByID(ctx context.Context, id string) (*domain.Album, error)
+	FindAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error)
 
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
+	FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 }
 
 type contentRepository struct {
@@ -190,6 +192,44 @@ func (r *contentRepository) ListTracks(ctx context.Context) ([]*domain.Track, er
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	cur, err := r.tracksCol.Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var out []*domain.Track
+	for cur.Next(ctx) {
+		var t domain.Track
+		if err := cur.Decode(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, &t)
+	}
+	return out, nil
+}
+
+func (r *contentRepository) FindAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cur, err := r.albumsCol.Find(ctx, bson.M{"artist_ids": artistID})
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var out []*domain.Album
+	for cur.Next(ctx) {
+		var a domain.Album
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, &a)
+	}
+	return out, nil
+}
+
+func (r *contentRepository) FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cur, err := r.tracksCol.Find(ctx, bson.M{"album_id": albumID})
 	if err != nil {
 		return nil, err
 	}

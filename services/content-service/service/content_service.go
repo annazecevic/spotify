@@ -20,9 +20,12 @@ type ContentService interface {
 
 	CreateAlbum(ctx context.Context, al *domain.Album) error
 	ListAlbums(ctx context.Context) ([]*domain.Album, error)
+	GetAlbumByID(ctx context.Context, id string) (*domain.Album, error)
+	GetAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error)
 
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
+	GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 }
 
 type contentService struct {
@@ -87,4 +90,23 @@ func (s *contentService) CreateTrack(ctx context.Context, t *domain.Track) error
 
 func (s *contentService) ListTracks(ctx context.Context) ([]*domain.Track, error) {
 	return s.repo.ListTracks(ctx)
+}
+
+func (s *contentService) GetAlbumByID(ctx context.Context, id string) (*domain.Album, error) {
+	album, err := s.repo.FindAlbumByID(ctx, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("album not found")
+		}
+		return nil, err
+	}
+	return album, nil
+}
+
+func (s *contentService) GetAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error) {
+	return s.repo.FindAlbumsByArtistID(ctx, artistID)
+}
+
+func (s *contentService) GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error) {
+	return s.repo.FindTracksByAlbumID(ctx, albumID)
 }
