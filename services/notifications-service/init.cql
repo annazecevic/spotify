@@ -30,13 +30,13 @@ CREATE INDEX IF NOT EXISTS idx_notification_type ON notifications (type);
 -- Primer podataka za testiranje
 -- Korisnik user123
 INSERT INTO notifications (id, user_id, type, message, title, created_at, read, artist_id, album_id)
-VALUES (uuid(), 'user123', 'NEW_ALBUM', 'Nov album "Greatest Hits" umetnika The Beatles je objavljen!', 'Novi album', toTimestamp(now()), false, 'artist1', 'album1');
+VALUES (uuid(), 'f2bf500b-3e23-43e3-97b4-3569e8ecb671', 'NEW_ALBUM', 'Nov album "Greatest Hits" umetnika The Beatles je objavljen!', 'Novi album', toTimestamp(now()), false, 'artist1', 'album1');
 
 INSERT INTO notifications (id, user_id, type, message, title, created_at, read, artist_id, track_id)
-VALUES (uuid(), 'user123', 'NEW_TRACK', 'Nova pesma "Let It Be" umetnika The Beatles je dostupna!', 'Nova pesma', toTimestamp(now()), false, 'artist1', 'track1');
+VALUES (uuid(), 'f2bf500b-3e23-43e3-97b4-3569e8ecb671', 'NEW_TRACK', 'Nova pesma "Let It Be" umetnika The Beatles je dostupna!', 'Nova pesma', toTimestamp(now()), false, 'artist1', 'track1');
 
 INSERT INTO notifications (id, user_id, type, message, title, created_at, read, genre_id, artist_id)
-VALUES (uuid(), 'user123', 'NEW_ARTIST', 'Novi umetnik "Pink Floyd" u žanru Rock je dodat!', 'Novi umetnik', toTimestamp(now()), false, 'genre1', 'artist2');
+VALUES (uuid(), 'f2bf500b-3e23-43e3-97b4-3569e8ecb671', 'NEW_ARTIST', 'Novi umetnik "Pink Floyd" u žanru Rock je dodat!', 'Novi umetnik', toTimestamp(now()), false, 'genre1', 'artist2');
 
 INSERT INTO notifications (id, user_id, type, message, title, created_at, read, artist_id, album_id)
 VALUES (uuid(), 'user123', 'NEW_ALBUM', 'Nov album "Abbey Road" umetnika The Beatles je objavljen!', 'Novi album', '2026-01-14 10:00:00+0000', true, 'artist1', 'album2');
