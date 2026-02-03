@@ -16,16 +16,19 @@ type ContentRepository interface {
 
 	CreateArtist(ctx context.Context, a *domain.Artist) error
 	ListArtists(ctx context.Context) ([]*domain.Artist, error)
+	SearchArtists(ctx context.Context, query string, genreID string) ([]*domain.Artist, error)
 	UpdateArtist(ctx context.Context, id string, updates map[string]interface{}) error
 	FindArtistByID(ctx context.Context, id string) (*domain.Artist, error)
 
 	CreateAlbum(ctx context.Context, al *domain.Album) error
 	ListAlbums(ctx context.Context) ([]*domain.Album, error)
+	SearchAlbums(ctx context.Context, query string) ([]*domain.Album, error)
 	FindAlbumByID(ctx context.Context, id string) (*domain.Album, error)
 	FindAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error)
 
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
+	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
 	FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 }
 
@@ -109,6 +112,39 @@ func (r *contentRepository) ListArtists(ctx context.Context) ([]*domain.Artist, 
 	return out, nil
 }
 
+func (r *contentRepository) SearchArtists(ctx context.Context, query string, genreID string) ([]*domain.Artist, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{}
+
+	if query != "" {
+		filter["name"] = bson.M{"$regex": query, "$options": "i"}
+	}
+
+	if genreID != "" {
+		filter["genres"] = bson.M{
+			"$elemMatch": bson.M{"id": genreID},
+		}
+	}
+
+	cur, err := r.artistsCol.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var out []*domain.Artist
+	for cur.Next(ctx) {
+		var a domain.Artist
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, &a)
+	}
+	return out, nil
+}
+
 func (r *contentRepository) FindArtistByID(ctx context.Context, id string) (*domain.Artist, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -170,6 +206,32 @@ func (r *contentRepository) ListAlbums(ctx context.Context) ([]*domain.Album, er
 	return out, nil
 }
 
+func (r *contentRepository) SearchAlbums(ctx context.Context, query string) ([]*domain.Album, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{}
+	if query != "" {
+		filter["title"] = bson.M{"$regex": query, "$options": "i"}
+	}
+
+	cur, err := r.albumsCol.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var out []*domain.Album
+	for cur.Next(ctx) {
+		var a domain.Album
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		out = append(out, &a)
+	}
+	return out, nil
+}
+
 func (r *contentRepository) FindAlbumByID(ctx context.Context, id string) (*domain.Album, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -196,6 +258,32 @@ func (r *contentRepository) ListTracks(ctx context.Context) ([]*domain.Track, er
 		return nil, err
 	}
 	defer cur.Close(ctx)
+	var out []*domain.Track
+	for cur.Next(ctx) {
+		var t domain.Track
+		if err := cur.Decode(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, &t)
+	}
+	return out, nil
+}
+
+func (r *contentRepository) SearchTracks(ctx context.Context, query string) ([]*domain.Track, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{}
+	if query != "" {
+		filter["title"] = bson.M{"$regex": query, "$options": "i"}
+	}
+
+	cur, err := r.tracksCol.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
 	var out []*domain.Track
 	for cur.Next(ctx) {
 		var t domain.Track

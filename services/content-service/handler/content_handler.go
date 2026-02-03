@@ -24,12 +24,15 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 
 	g.GET("/genres", h.ListGenres)
 	g.GET("/artists", h.ListArtists)
+	g.GET("/artists/search", h.SearchArtists)
 	g.GET("/artists/:id", h.GetArtist)
 	g.GET("/artists/:id/albums", h.GetArtistAlbums)
 	g.GET("/albums", h.ListAlbums)
+	g.GET("/albums/search", h.SearchAlbums)
 	g.GET("/albums/:id", h.GetAlbum)
 	g.GET("/albums/:id/tracks", h.GetAlbumTracks)
 	g.GET("/tracks", h.ListTracks)
+	g.GET("/tracks/search", h.SearchTracks)
 
 	g.POST("/genres", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateGenre)
 	g.POST("/artists", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateArtist)
@@ -187,6 +190,21 @@ func (h *ContentHandler) ListArtists(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+func (h *ContentHandler) SearchArtists(c *gin.Context) {
+	query := c.Query("q")
+	genreID := c.Query("genre")
+
+	query = sanitizeInput(query)
+	genreID = sanitizeInput(genreID)
+
+	out, err := h.svc.SearchArtists(c.Request.Context(), query, genreID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *ContentHandler) UpdateArtist(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -278,6 +296,18 @@ func (h *ContentHandler) CreateAlbum(c *gin.Context) {
 	c.JSON(http.StatusCreated, al)
 }
 
+func (h *ContentHandler) SearchAlbums(c *gin.Context) {
+	query := c.Query("q")
+	query = sanitizeInput(query)
+
+	out, err := h.svc.SearchAlbums(c.Request.Context(), query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *ContentHandler) ListAlbums(c *gin.Context) {
 	out, err := h.svc.ListAlbums(c.Request.Context())
 	if err != nil {
@@ -339,6 +369,18 @@ func sanitizeInput(input string) string {
 		return ""
 	}
 	return sanitized
+}
+
+func (h *ContentHandler) SearchTracks(c *gin.Context) {
+	query := c.Query("q")
+	query = sanitizeInput(query)
+
+	out, err := h.svc.SearchTracks(c.Request.Context(), query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func validateStringLength(input string, min, max int) error {

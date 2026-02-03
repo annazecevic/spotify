@@ -15,16 +15,19 @@ type ContentService interface {
 
 	CreateArtist(ctx context.Context, a *domain.Artist) error
 	ListArtists(ctx context.Context) ([]*domain.Artist, error)
+	SearchArtists(ctx context.Context, query string, genreID string) ([]*domain.Artist, error)
 	GetArtistByID(ctx context.Context, id string) (*domain.Artist, error)
 	UpdateArtist(ctx context.Context, id string, updates map[string]interface{}) error
 
 	CreateAlbum(ctx context.Context, al *domain.Album) error
 	ListAlbums(ctx context.Context) ([]*domain.Album, error)
+	SearchAlbums(ctx context.Context, query string) ([]*domain.Album, error)
 	GetAlbumByID(ctx context.Context, id string) (*domain.Album, error)
 	GetAlbumsByArtistID(ctx context.Context, artistID string) ([]*domain.Album, error)
 
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
+	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
 	GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 }
 
@@ -52,6 +55,10 @@ func (s *contentService) ListArtists(ctx context.Context) ([]*domain.Artist, err
 	return s.repo.ListArtists(ctx)
 }
 
+func (s *contentService) SearchArtists(ctx context.Context, query string, genreID string) ([]*domain.Artist, error) {
+	return s.repo.SearchArtists(ctx, query, genreID)
+}
+
 func (s *contentService) GetArtistByID(ctx context.Context, id string) (*domain.Artist, error) {
 	artist, err := s.repo.FindArtistByID(ctx, id)
 	if err != nil {
@@ -71,6 +78,10 @@ func (s *contentService) CreateAlbum(ctx context.Context, al *domain.Album) erro
 	return s.repo.CreateAlbum(ctx, al)
 }
 
+func (s *contentService) SearchAlbums(ctx context.Context, query string) ([]*domain.Album, error) {
+	return s.repo.SearchAlbums(ctx, query)
+}
+
 func (s *contentService) ListAlbums(ctx context.Context) ([]*domain.Album, error) {
 	return s.repo.ListAlbums(ctx)
 }
@@ -86,6 +97,10 @@ func (s *contentService) CreateTrack(ctx context.Context, t *domain.Track) error
 		}
 	}
 	return s.repo.CreateTrack(ctx, t)
+}
+
+func (s *contentService) SearchTracks(ctx context.Context, query string) ([]*domain.Track, error) {
+	return s.repo.SearchTracks(ctx, query)
 }
 
 func (s *contentService) ListTracks(ctx context.Context) ([]*domain.Track, error) {
