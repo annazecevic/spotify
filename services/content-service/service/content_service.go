@@ -29,6 +29,7 @@ type ContentService interface {
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
 	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
 	GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
+	UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error
 }
 
 type contentService struct {
@@ -124,4 +125,8 @@ func (s *contentService) GetAlbumsByArtistID(ctx context.Context, artistID strin
 
 func (s *contentService) GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error) {
 	return s.repo.FindTracksByAlbumID(ctx, albumID)
+}
+
+func (s *contentService) UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error {
+	return s.repo.UpdateTrackHDFSPath(ctx, trackID, hdfsPath)
 }

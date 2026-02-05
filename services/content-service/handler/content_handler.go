@@ -40,6 +40,7 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 	g.POST("/tracks", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateTrack)
 
 	g.PUT("/artists/:id", middleware.AuthMiddleware(), middleware.AdminOnly(), h.UpdateArtist)
+	g.PUT("/tracks/:id/hdfs-path", middleware.AuthMiddleware(), middleware.AdminOnly(), h.UpdateTrackHDFSPath)
 }
 
 func (h *ContentHandler) CreateGenre(c *gin.Context) {
@@ -406,4 +407,27 @@ func (h *ContentHandler) ListTracks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *ContentHandler) UpdateTrackHDFSPath(c *gin.Context) {
+	trackID := c.Param("id")
+	if trackID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "track id is required"})
+		return
+	}
+
+	var req struct {
+		HDFSPath string `json:"hdfs_path" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.UpdateTrackHDFSPath(c.Request.Context(), trackID, req.HDFSPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "hdfs_path updated successfully"})
 }
