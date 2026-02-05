@@ -30,6 +30,7 @@ type ContentRepository interface {
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
 	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
 	FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
+	UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error
 }
 
 type contentRepository struct {
@@ -331,4 +332,15 @@ func (r *contentRepository) FindTracksByAlbumID(ctx context.Context, albumID str
 		out = append(out, &t)
 	}
 	return out, nil
+}
+
+func (r *contentRepository) UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	_, err := r.tracksCol.UpdateOne(
+		ctx,
+		bson.M{"id": trackID},
+		bson.M{"$set": bson.M{"hdfs_path": hdfsPath}},
+	)
+	return err
 }

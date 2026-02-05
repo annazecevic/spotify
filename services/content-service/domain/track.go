@@ -7,4 +7,6 @@ type Track struct {
 	Genre     string   `bson:"genre" json:"genre"`
 	AlbumID   string   `bson:"album_id,omitempty" json:"album_id,omitempty"`
 	ArtistIDs []string `bson:"artist_ids" json:"artist_ids"`
+	HDFSPath  string   `bson:"hdfs_path,omitempty" json:"hdfs_path,omitempty"`
+	StreamURL string   `bson:"-" json:"stream_url,omitempty"`
 }
