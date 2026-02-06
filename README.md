@@ -1,8 +1,6 @@
 # Security Architecture — Spotify Clone
 
 **Security Lead** · Defensive design for a distributed media platform  
-*Audience: Technical recruiters (e.g. SOC Analyst roles)*
-
 ---
 
 ## 1. Introduction: Security Philosophy
