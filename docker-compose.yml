@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: spotify-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: spotify_users
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - spotify-network
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile
+    container_name: spotify-user-service
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./services/user-service/.env
+    environment:
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DATABASE: spotify_users
+      SERVER_PORT: 8080
+      ENVIRONMENT: development
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    container_name: spotify-content-service
+    ports:
+      - "8081:8081"
+    env_file:
+      - ./services/content-service/.env
+    depends_on:
+      - mongodb
+    networks:
+      - spotify-network
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: spotify-cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: spotify-cluster
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    networks:
+      - spotify-network
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  notifications-service:
+    build:
+      context: ./services/notifications-service
+      dockerfile: Dockerfile
+    container_name: spotify-notifications-service
+    ports:
+      - "8082:8082"
+    env_file:
+      - ./services/notifications-service/.env
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    networks:
+      - spotify-network
+
+  api-gateway:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: spotify-api-gateway
+    ports:
+      - "8090:8080"
+      - "8000:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - user-service
+      - content-service
+      - notifications-service
+    networks:
+      - spotify-network
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: always
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=spotify-cluster
+    env_file:
+      - ./hadoop.env
+    networks:
+      - spotify-network
+
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    restart: always
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    depends_on:
+      - namenode
+    networks:
+      - spotify-network
+
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    restart: always
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+    depends_on:
+      - namenode
+    networks:
+      - spotify-network
+
+  storage-service:
+    build:
+      context: ./services/storage-service
+      dockerfile: Dockerfile
+    container_name: spotify-storage-service
+    restart: always
+    ports:
+      - "8084:8084"
+    env_file:
+      - ./services/storage-service/.env
+    depends_on:
+      - namenode
+      - datanode1
+      - datanode2
+    networks:
+      - spotify-network
+
+networks:
+  spotify-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  cassandra_data:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:

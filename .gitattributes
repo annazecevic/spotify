@@ -1,0 +1,14 @@
+# Shell skripte -> u repou uvek LF, da Docker / Linux ne puca
+*.sh text eol=lf
+
+# Dockerfile -> u repou LF, Windows editor može da vidi CRLF
+Dockerfile text eol=lf
+
+# YAML fajlovi (docker-compose) -> u repou LF
+*.yml text eol=lf
+
+# Env fajlovi -> u repou LF
+*.env text eol=lf
+
+# Ostali tekstualni fajlovi -> Git automatski odredi (Windows CRLF lokalno, LF u repou)
+* text=auto
