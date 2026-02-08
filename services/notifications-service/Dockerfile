@@ -7,6 +7,9 @@ RUN go mod download
 
 COPY . .
 
+# Resolve new dependencies added to go.mod
+RUN go mod tidy
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o notifications-service .
 
 FROM alpine:latest

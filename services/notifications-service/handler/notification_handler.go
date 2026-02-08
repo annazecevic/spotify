@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/annazecevic/notifications-service/logger"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/gin-gonic/gin"
 )
@@ -23,12 +24,19 @@ func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
 		userID = c.Query("user_id")
 	}
 	if userID == "" {
+		logger.Warn(logger.EventValidationFailure, "Missing user_id in notification request", logger.Fields(
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
 		return
 	}
 
 	notifications, err := h.service.GetUserNotifications(userID)
 	if err != nil {
+		logger.Error(logger.EventGeneral, "Failed to fetch user notifications", logger.Fields(
+			"user_id", userID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
 		return
 	}
@@ -42,6 +50,9 @@ func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
 func (h *NotificationHandler) GetAllNotifications(c *gin.Context) {
 	notifications, err := h.service.GetAllNotifications()
 	if err != nil {
+		logger.Error(logger.EventGeneral, "Failed to fetch all notifications", logger.Fields(
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notifications"})
 		return
 	}

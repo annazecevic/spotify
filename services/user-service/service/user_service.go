@@ -8,6 +8,7 @@ import (
 
 	"github.com/annazecevic/user-service/domain"
 	"github.com/annazecevic/user-service/dto"
+	"github.com/annazecevic/user-service/logger"
 	"github.com/annazecevic/user-service/repository"
 	"github.com/annazecevic/user-service/utils"
 	"github.com/google/uuid"
@@ -120,7 +121,10 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 	}
 
 	if err := s.emailService.SendConfirmationEmail(user.Email, user.Name, confirmationToken); err != nil {
-		fmt.Printf("Warning: Failed to send confirmation email: %v\n", err)
+		logger.Warn(logger.EventGeneral, "Failed to send confirmation email", logger.Fields(
+			"user_id", user.ID,
+			"error", err.Error(),
+		))
 	}
 
 	return &dto.UserResponse{
@@ -223,7 +227,10 @@ func (s *userService) RequestPasswordReset(ctx context.Context, email string) er
 	}
 
 	if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, resetToken); err != nil {
-		fmt.Printf("Warning: Failed to send password reset email: %v\n", err)
+		logger.Warn(logger.EventGeneral, "Failed to send password reset email", logger.Fields(
+			"user_id", user.ID,
+			"error", err.Error(),
+		))
 	}
 
 	return nil
@@ -348,7 +355,10 @@ func (s *userService) RequestMagicLink(ctx context.Context, email string) error 
 	}
 
 	if err := s.emailService.SendMagicLinkEmail(user.Email, user.Name, magicLinkToken); err != nil {
-		fmt.Printf("Warning: Failed to send magic link email: %v\n", err)
+		logger.Warn(logger.EventGeneral, "Failed to send magic link email", logger.Fields(
+			"user_id", user.ID,
+			"error", err.Error(),
+		))
 	}
 
 	return nil
