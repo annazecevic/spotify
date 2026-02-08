@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/annazecevic/storage-service/logger"
+	"storage-service/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"storage-service/hdfs"
+	"storage-service/logger"
 	"strconv"
 	"strings"
 
@@ -20,14 +21,25 @@ func NewStorageHandler(client *hdfs.Client) *StorageHandler {
 }
 
 func (h *StorageHandler) UploadTrack(c *gin.Context) {
+	userID := c.GetString("user_id")
+
 	trackID := c.PostForm("track_id")
 	if trackID == "" {
+		logger.Warn(logger.EventValidationFailure, "Missing track_id in upload request", logger.Fields(
+			"user_id", userID,
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "track_id is required"})
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
+		logger.Warn(logger.EventValidationFailure, "Missing file in upload request", logger.Fields(
+			"user_id", userID,
+			"track_id", trackID,
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
 		return
 	}
@@ -37,6 +49,13 @@ func (h *StorageHandler) UploadTrack(c *gin.Context) {
 	if !strings.HasPrefix(contentType, "audio/") {
 		ext := strings.ToLower(header.Filename[strings.LastIndex(header.Filename, ".")+1:])
 		if ext != "mp3" && ext != "wav" && ext != "flac" && ext != "m4a" && ext != "ogg" {
+			logger.Warn(logger.EventValidationFailure, "Invalid file type for upload", logger.Fields(
+				"user_id", userID,
+				"track_id", trackID,
+				"filename", header.Filename,
+				"content_type", contentType,
+				"ip", c.ClientIP(),
+			))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file type, must be audio"})
 			return
 		}
@@ -44,10 +63,22 @@ func (h *StorageHandler) UploadTrack(c *gin.Context) {
 
 	path, err := h.hdfsClient.UploadTrack(trackID, file, header.Size)
 	if err != nil {
+		logger.Error(logger.EventGeneral, "Failed to upload track to HDFS", logger.Fields(
+			"user_id", userID,
+			"track_id", trackID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to upload: %v", err)})
 		return
 	}
 
+	logger.Security(logger.EventAdminActivity, "Track uploaded to HDFS", logger.Fields(
+		"user_id", userID,
+		"track_id", trackID,
+		"hdfs_path", path,
+		"size", header.Size,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "track uploaded successfully",
 		"track_id":  trackID,
@@ -147,17 +178,33 @@ func (h *StorageHandler) GetTrackInfo(c *gin.Context) {
 }
 
 func (h *StorageHandler) DeleteTrack(c *gin.Context) {
+	userID := c.GetString("user_id")
+
 	trackID := c.Param("trackId")
 	if trackID == "" {
+		logger.Warn(logger.EventValidationFailure, "Missing track_id in delete request", logger.Fields(
+			"user_id", userID,
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "track_id is required"})
 		return
 	}
 
 	if err := h.hdfsClient.DeleteTrack(trackID); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to delete track from HDFS", logger.Fields(
+			"user_id", userID,
+			"track_id", trackID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete: %v", err)})
 		return
 	}
 
+	logger.Security(logger.EventAdminActivity, "Track deleted from HDFS", logger.Fields(
+		"user_id", userID,
+		"track_id", trackID,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "track deleted successfully",
 		"track_id": trackID,
@@ -165,11 +212,21 @@ func (h *StorageHandler) DeleteTrack(c *gin.Context) {
 }
 
 func (h *StorageHandler) GetStats(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	stats, err := h.hdfsClient.GetStats()
 	if err != nil {
+		logger.Error(logger.EventGeneral, "Failed to get HDFS stats", logger.Fields(
+			"admin_id", adminID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to get stats: %v", err)})
 		return
 	}
 
+	logger.Security(logger.EventAdminActivity, "HDFS stats accessed", logger.Fields(
+		"admin_id", adminID,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusOK, stats)
 }

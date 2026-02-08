@@ -7,6 +7,7 @@ import (
 
 	"github.com/annazecevic/content-service/domain"
 	"github.com/annazecevic/content-service/dto"
+	"github.com/annazecevic/content-service/logger"
 	"github.com/annazecevic/content-service/middleware"
 	"github.com/annazecevic/content-service/service"
 	"github.com/gin-gonic/gin"
@@ -43,23 +44,41 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 	g.PUT("/tracks/:id/hdfs-path", middleware.AuthMiddleware(), middleware.AdminOnly(), h.UpdateTrackHDFSPath)
 }
 
+// --- Admin CRUD operations (all require admin role via middleware) ---
+
 func (h *ContentHandler) CreateGenre(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	var req dto.CreateGenreRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid create genre request", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Input validation and sanitization (2.18)
 	req.Name = sanitizeInput(req.Name)
 	req.Desc = sanitizeInput(req.Desc)
 
 	if err := validateStringLength(req.Name, 2, 50); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Genre name validation failed", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "genre name: " + err.Error()})
 		return
 	}
 
 	if err := validateStringLength(req.Desc, 0, 500); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Genre description validation failed", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "genre description: " + err.Error()})
 		return
 	}
@@ -70,9 +89,20 @@ func (h *ContentHandler) CreateGenre(c *gin.Context) {
 		Desc: req.Desc,
 	}
 	if err := h.svc.CreateGenre(c.Request.Context(), g); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to create genre", logger.Fields(
+			"admin_id", adminID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	logger.Security(logger.EventAdminActivity, "Genre created", logger.Fields(
+		"admin_id", adminID,
+		"genre_id", g.ID,
+		"genre_name", g.Name,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusCreated, g)
 }
 
@@ -154,17 +184,28 @@ func (h *ContentHandler) GetAlbumTracks(c *gin.Context) {
 }
 
 func (h *ContentHandler) CreateArtist(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	var req dto.CreateArtistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid create artist request", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Input validation and sanitization (2.18)
 	req.Name = sanitizeInput(req.Name)
 	req.About = sanitizeInput(req.About)
 
 	if err := validateStringLength(req.Name, 2, 100); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Artist name validation failed", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "artist name: " + err.Error()})
 		return
 	}
@@ -176,9 +217,20 @@ func (h *ContentHandler) CreateArtist(c *gin.Context) {
 		About:  req.About,
 	}
 	if err := h.svc.CreateArtist(c.Request.Context(), a); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to create artist", logger.Fields(
+			"admin_id", adminID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	logger.Security(logger.EventAdminActivity, "Artist created", logger.Fields(
+		"admin_id", adminID,
+		"artist_id", a.ID,
+		"artist_name", a.Name,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusCreated, a)
 }
 
@@ -207,6 +259,8 @@ func (h *ContentHandler) SearchArtists(c *gin.Context) {
 }
 
 func (h *ContentHandler) UpdateArtist(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	id := c.Param("id")
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "artist id is required"})
@@ -215,6 +269,12 @@ func (h *ContentHandler) UpdateArtist(c *gin.Context) {
 
 	var req dto.UpdateArtistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid update artist request", logger.Fields(
+			"admin_id", adminID,
+			"artist_id", id,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -234,6 +294,12 @@ func (h *ContentHandler) UpdateArtist(c *gin.Context) {
 	if req.Name != "" {
 		req.Name = sanitizeInput(req.Name)
 		if err := validateStringLength(req.Name, 2, 100); err != nil {
+			logger.Warn(logger.EventValidationFailure, "Artist name validation failed", logger.Fields(
+				"admin_id", adminID,
+				"artist_id", id,
+				"ip", c.ClientIP(),
+				"error", err.Error(),
+			))
 			c.JSON(http.StatusBadRequest, gin.H{"error": "artist name: " + err.Error()})
 			return
 		}
@@ -250,11 +316,21 @@ func (h *ContentHandler) UpdateArtist(c *gin.Context) {
 	}
 
 	if len(updates) == 0 {
+		logger.Warn(logger.EventValidationFailure, "No fields provided for artist update", logger.Fields(
+			"admin_id", adminID,
+			"artist_id", id,
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no fields to update"})
 		return
 	}
 
 	if err := h.svc.UpdateArtist(c.Request.Context(), id, updates); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to update artist", logger.Fields(
+			"admin_id", adminID,
+			"artist_id", id,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -265,20 +341,36 @@ func (h *ContentHandler) UpdateArtist(c *gin.Context) {
 		return
 	}
 
+	logger.Security(logger.EventAdminActivity, "Artist updated", logger.Fields(
+		"admin_id", adminID,
+		"artist_id", id,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusOK, updatedArtist)
 }
 
 func (h *ContentHandler) CreateAlbum(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	var req dto.CreateAlbumRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid create album request", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Input validation and sanitization (2.18)
 	req.Title = sanitizeInput(req.Title)
 
 	if err := validateStringLength(req.Title, 1, 200); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Album title validation failed", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "album title: " + err.Error()})
 		return
 	}
@@ -291,9 +383,20 @@ func (h *ContentHandler) CreateAlbum(c *gin.Context) {
 		ArtistIDs: req.ArtistIDs,
 	}
 	if err := h.svc.CreateAlbum(c.Request.Context(), al); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to create album", logger.Fields(
+			"admin_id", adminID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	logger.Security(logger.EventAdminActivity, "Album created", logger.Fields(
+		"admin_id", adminID,
+		"album_id", al.ID,
+		"album_title", al.Title,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusCreated, al)
 }
 
@@ -319,22 +422,37 @@ func (h *ContentHandler) ListAlbums(c *gin.Context) {
 }
 
 func (h *ContentHandler) CreateTrack(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	var req dto.CreateTrackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid create track request", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Input validation and sanitization (2.18)
 	req.Title = sanitizeInput(req.Title)
 
 	if err := validateStringLength(req.Title, 1, 200); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Track title validation failed", logger.Fields(
+			"admin_id", adminID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "track title: " + err.Error()})
 		return
 	}
 
-	// Validate duration (numeric validation - 2.18)
-	if req.Duration < 1 || req.Duration > 7200 { // 1 second to 2 hours
+	if req.Duration < 1 || req.Duration > 7200 {
+		logger.Warn(logger.EventValidationFailure, "Invalid track duration", logger.Fields(
+			"admin_id", adminID,
+			"duration", req.Duration,
+			"ip", c.ClientIP(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid track duration"})
 		return
 	}
@@ -348,24 +466,30 @@ func (h *ContentHandler) CreateTrack(c *gin.Context) {
 		ArtistIDs: req.ArtistIDs,
 	}
 	if err := h.svc.CreateTrack(c.Request.Context(), t); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to create track", logger.Fields(
+			"admin_id", adminID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	logger.Security(logger.EventAdminActivity, "Track created", logger.Fields(
+		"admin_id", adminID,
+		"track_id", t.ID,
+		"track_title", t.Title,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusCreated, t)
 }
-
-// Helper functions for validation and sanitization (2.18)
 
 func generateID() string {
 	return uuid.New().String()
 }
 
 func sanitizeInput(input string) string {
-	// HTML escape to prevent XSS
 	sanitized := html.EscapeString(input)
-	// Trim whitespace
 	sanitized = strings.TrimSpace(sanitized)
-	// Check for malicious patterns
 	if middleware.CheckXSSPatterns(sanitized) || middleware.CheckSQLInjectionPatterns(sanitized) {
 		return ""
 	}
@@ -410,6 +534,8 @@ func (h *ContentHandler) ListTracks(c *gin.Context) {
 }
 
 func (h *ContentHandler) UpdateTrackHDFSPath(c *gin.Context) {
+	adminID := c.GetString("user_id")
+
 	trackID := c.Param("id")
 	if trackID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "track id is required"})
@@ -420,14 +546,30 @@ func (h *ContentHandler) UpdateTrackHDFSPath(c *gin.Context) {
 		HDFSPath string `json:"hdfs_path" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid HDFS path update request", logger.Fields(
+			"admin_id", adminID,
+			"track_id", trackID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := h.svc.UpdateTrackHDFSPath(c.Request.Context(), trackID, req.HDFSPath); err != nil {
+		logger.Error(logger.EventGeneral, "Failed to update track HDFS path", logger.Fields(
+			"admin_id", adminID,
+			"track_id", trackID,
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	logger.Security(logger.EventAdminActivity, "Track HDFS path updated", logger.Fields(
+		"admin_id", adminID,
+		"track_id", trackID,
+		"ip", c.ClientIP(),
+	))
 	c.JSON(http.StatusOK, gin.H{"message": "hdfs_path updated successfully"})
 }

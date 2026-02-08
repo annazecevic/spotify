@@ -257,12 +257,22 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 
 	var req dto.UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logger.Warn(logger.EventValidationFailure, "Invalid update profile request", logger.Fields(
+			"user_id", userID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	user, err := h.userService.UpdateProfile(c.Request.Context(), userID, &req)
 	if err != nil {
+		logger.Warn(logger.EventValidationFailure, "Profile update failed", logger.Fields(
+			"user_id", userID,
+			"ip", c.ClientIP(),
+			"error", err.Error(),
+		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
