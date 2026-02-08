@@ -1,8 +1,9 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -19,11 +20,18 @@ type Config struct {
 	SMTPPassword  string
 	SMTPFrom      string
 	AppURL        string
+
+	// Logging
+	LogFilePath   string
+	LogHMACKey    string
+	LogMaxSizeMB  int
+	LogMaxBackups int
+	LogMaxAgeDays int
 }
 
 func LoadConfig() *Config {
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+		fmt.Println("No .env file found, using environment variables")
 	}
 
 	return &Config{
@@ -38,12 +46,27 @@ func LoadConfig() *Config {
 		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:      getEnv("SMTP_FROM", "noreply@spotify.com"),
 		AppURL:        getEnv("APP_URL", "http://localhost:3000"),
+
+		LogFilePath:   getEnv("LOG_FILE_PATH", "/var/log/user-service/app.log"),
+		LogHMACKey:    getEnv("LOG_HMAC_KEY", "default-hmac-key-change-in-production"),
+		LogMaxSizeMB:  getEnvAsInt("LOG_MAX_SIZE_MB", 100),
+		LogMaxBackups: getEnvAsInt("LOG_MAX_BACKUPS", 5),
+		LogMaxAgeDays: getEnvAsInt("LOG_MAX_AGE_DAYS", 30),
 	}
 }
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intVal, err := strconv.Atoi(value); err == nil {
+			return intVal
+		}
 	}
 	return defaultValue
 }

@@ -9,6 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	go.mongodb.org/mongo-driver v1.17.6
 	golang.org/x/crypto v0.28.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

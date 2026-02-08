@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/annazecevic/content-service/domain"
+	"github.com/annazecevic/content-service/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -65,6 +66,12 @@ func (r *contentRepository) CreateGenre(ctx context.Context, g *domain.Genre) er
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := r.genresCol.InsertOne(ctx, g)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to create genre", logger.Fields(
+			"genre_id", g.ID,
+			"error", err.Error(),
+		))
+	}
 	return err
 }
 
@@ -91,6 +98,12 @@ func (r *contentRepository) CreateArtist(ctx context.Context, a *domain.Artist) 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := r.artistsCol.InsertOne(ctx, a)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to create artist", logger.Fields(
+			"artist_id", a.ID,
+			"error", err.Error(),
+		))
+	}
 	return err
 }
 
@@ -171,10 +184,17 @@ func (r *contentRepository) UpdateArtist(ctx context.Context, id string, updates
 
 	result, err := r.artistsCol.UpdateOne(ctx, bson.M{"id": id}, update)
 	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to update artist", logger.Fields(
+			"artist_id", id,
+			"error", err.Error(),
+		))
 		return err
 	}
 
 	if result.MatchedCount == 0 {
+		logger.Security(logger.EventStateChange, "Update attempted for non-existent artist", logger.Fields(
+			"artist_id", id,
+		))
 		return mongo.ErrNoDocuments
 	}
 
@@ -185,6 +205,12 @@ func (r *contentRepository) CreateAlbum(ctx context.Context, al *domain.Album) e
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := r.albumsCol.InsertOne(ctx, al)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to create album", logger.Fields(
+			"album_id", al.ID,
+			"error", err.Error(),
+		))
+	}
 	return err
 }
 
@@ -248,6 +274,12 @@ func (r *contentRepository) CreateTrack(ctx context.Context, t *domain.Track) er
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := r.tracksCol.InsertOne(ctx, t)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to create track", logger.Fields(
+			"track_id", t.ID,
+			"error", err.Error(),
+		))
+	}
 	return err
 }
 
@@ -337,10 +369,26 @@ func (r *contentRepository) FindTracksByAlbumID(ctx context.Context, albumID str
 func (r *contentRepository) UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	_, err := r.tracksCol.UpdateOne(
+
+	result, err := r.tracksCol.UpdateOne(
 		ctx,
 		bson.M{"id": trackID},
 		bson.M{"$set": bson.M{"hdfs_path": hdfsPath}},
 	)
-	return err
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to update track HDFS path", logger.Fields(
+			"track_id", trackID,
+			"error", err.Error(),
+		))
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		logger.Security(logger.EventStateChange, "HDFS path update attempted for non-existent track", logger.Fields(
+			"track_id", trackID,
+		))
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }

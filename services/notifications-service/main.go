@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/annazecevic/notifications-service/config"
 	"github.com/annazecevic/notifications-service/handler"
+	"github.com/annazecevic/notifications-service/logger"
 	"github.com/annazecevic/notifications-service/repository"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/gin-gonic/gin"
@@ -16,6 +16,21 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 
+	logger.Init(logger.Config{
+		ServiceName: "notifications-service",
+		Environment: cfg.Environment,
+		LogFilePath: cfg.LogFilePath,
+		HMACKey:     cfg.LogHMACKey,
+		MaxSizeMB:   cfg.LogMaxSizeMB,
+		MaxBackups:  cfg.LogMaxBackups,
+		MaxAgeDays:  cfg.LogMaxAgeDays,
+	})
+
+	logger.Info(logger.EventServiceStartup, "Notifications service starting", logger.Fields(
+		"port", cfg.ServerPort,
+		"environment", cfg.Environment,
+	))
+
 	cluster := gocql.NewCluster(cfg.CassandraHosts...)
 	cluster.Keyspace = cfg.CassandraKeyspace
 	cluster.Consistency = gocql.Quorum
@@ -24,11 +39,11 @@ func main() {
 
 	session, err := cluster.CreateSession()
 	if err != nil {
-		log.Fatal("Failed to connect to Cassandra:", err)
+		logger.Fatal(logger.EventDBError, "Failed to connect to Cassandra", logger.Fields("error", err.Error()))
 	}
 	defer session.Close()
 
-	log.Println("Connected to Cassandra successfully")
+	logger.Info(logger.EventDBConnection, "Connected to Cassandra successfully", nil)
 
 	notificationRepo := repository.NewNotificationRepository(session)
 	notificationService := service.NewNotificationService(notificationRepo)
@@ -50,8 +65,8 @@ func main() {
 	notificationHandler.RegisterRoutes(router)
 
 	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("Starting notifications-service on %s", addr)
+	logger.Info(logger.EventServiceStartup, "Server starting", logger.Fields("address", addr))
 	if err := router.Run(addr); err != nil {
-		log.Fatal("Failed to start server:", err)
+		logger.Fatal(logger.EventGeneral, "Failed to start server", logger.Fields("error", err.Error()))
 	}
 }

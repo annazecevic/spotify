@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"storage-service/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/time/rate"
@@ -23,6 +25,7 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
+			logger.Security(logger.EventInvalidToken, "Missing authorization header", logger.Fields("ip", c.ClientIP()))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authorization header required"})
 			c.Abort()
 			return
@@ -30,6 +33,7 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
+			logger.Security(logger.EventInvalidToken, "Invalid authorization header format", logger.Fields("ip", c.ClientIP()))
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
 			c.Abort()
 			return
@@ -43,6 +47,11 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
+			if errors.Is(err, jwt.ErrTokenExpired) {
+				logger.Security(logger.EventExpiredToken, "Access attempt with expired token", logger.Fields("ip", c.ClientIP()))
+			} else {
+				logger.Security(logger.EventInvalidToken, "Access attempt with invalid token", logger.Fields("ip", c.ClientIP()))
+			}
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
 			return
@@ -61,6 +70,10 @@ func AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists || role != "admin" {
+			logger.Security(logger.EventAccessDenied, "Admin access denied", logger.Fields(
+				"user_id", c.GetString("user_id"),
+				"ip", c.ClientIP(),
+			))
 			c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
 			c.Abort()
 			return

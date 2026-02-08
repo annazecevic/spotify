@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/annazecevic/user-service/config"
 	"github.com/annazecevic/user-service/handler"
+	"github.com/annazecevic/user-service/logger"
 	"github.com/annazecevic/user-service/middleware"
 	"github.com/annazecevic/user-service/repository"
 	"github.com/annazecevic/user-service/service"
@@ -19,19 +19,34 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 
+	logger.Init(logger.Config{
+		ServiceName: "user-service",
+		Environment: cfg.Environment,
+		LogFilePath: cfg.LogFilePath,
+		HMACKey:     cfg.LogHMACKey,
+		MaxSizeMB:   cfg.LogMaxSizeMB,
+		MaxBackups:  cfg.LogMaxBackups,
+		MaxAgeDays:  cfg.LogMaxAgeDays,
+	})
+
+	logger.Info(logger.EventServiceStartup, "User service starting", logger.Fields(
+		"port", cfg.ServerPort,
+		"environment", cfg.Environment,
+	))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.MongoURI))
 	if err != nil {
-		log.Fatal("Failed to connect to MongoDB:", err)
+		logger.Fatal(logger.EventDBError, "Failed to connect to MongoDB", logger.Fields("error", err.Error()))
 	}
 	defer client.Disconnect(context.Background())
 
 	if err := client.Ping(ctx, nil); err != nil {
-		log.Fatal("Failed to ping MongoDB:", err)
+		logger.Fatal(logger.EventDBError, "Failed to ping MongoDB", logger.Fields("error", err.Error()))
 	}
-	log.Println("Connected to MongoDB successfully")
+	logger.Info(logger.EventDBConnection, "Connected to MongoDB successfully", nil)
 
 	db := client.Database(cfg.MongoDatabase)
 
@@ -105,8 +120,8 @@ func main() {
 		}
 	}
 
-	log.Printf("Starting server on port %s", cfg.ServerPort)
+	logger.Info(logger.EventServiceStartup, "Server starting", logger.Fields("port", cfg.ServerPort))
 	if err := router.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatal("Failed to start server:", err)
+		logger.Fatal(logger.EventGeneral, "Failed to start server", logger.Fields("error", err.Error()))
 	}
 }
