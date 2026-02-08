@@ -2,12 +2,12 @@ package handler
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/annazecevic/user-service/dto"
+	"github.com/annazecevic/user-service/logger"
 	"github.com/annazecevic/user-service/service"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -106,7 +106,7 @@ func (h *UserHandler) ValidateToken(c *gin.Context) {
 	if role, ok := claims["role"].(string); ok && role != "" {
 		c.Header("X-User-Role", role)
 	}
-	log.Printf("ValidateToken: valid token for user_id=%s\n", sub)
+	logger.Info(logger.EventGeneral, "Token validated successfully", logger.Fields("user_id", sub))
 
 	c.JSON(http.StatusOK, gin.H{"user_id": sub})
 }

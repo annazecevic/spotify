@@ -2,10 +2,10 @@ package repository
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/annazecevic/notifications-service/domain"
+	"github.com/annazecevic/notifications-service/logger"
 	"github.com/gocql/gocql"
 )
 
@@ -45,7 +45,7 @@ func (r *notificationRepository) GetUserNotifications(userID string) ([]domain.N
 	}
 
 	if err := iter.Close(); err != nil {
-		log.Printf("Error fetching notifications for user %s: %v", userID, err)
+		logger.Error(logger.EventDBError, "Error fetching user notifications", logger.Fields("user_id", userID, "error", err.Error()))
 		return nil, fmt.Errorf("failed to fetch notifications: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func (r *notificationRepository) GetAllNotifications() ([]domain.Notification, e
 	}
 
 	if err := iter.Close(); err != nil {
-		log.Printf("Error fetching all notifications: %v", err)
+		logger.Error(logger.EventDBError, "Error fetching all notifications", logger.Fields("error", err.Error()))
 		return nil, fmt.Errorf("failed to fetch notifications: %w", err)
 	}
 
@@ -104,7 +104,7 @@ func (r *notificationRepository) CreateNotification(notification *domain.Notific
 	).Exec()
 
 	if err != nil {
-		log.Printf("Error creating notification: %v", err)
+		logger.Error(logger.EventDBError, "Error creating notification", logger.Fields("error", err.Error()))
 		return fmt.Errorf("failed to create notification: %w", err)
 	}
 

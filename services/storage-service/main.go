@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"storage-service/config"
 	"storage-service/handler"
 	"storage-service/hdfs"
+	"storage-service/logger"
 	"storage-service/middleware"
 	"time"
 
@@ -20,7 +20,11 @@ func connectWithRetry(namenodeAddr string, maxRetries int) (*hdfs.Client, error)
 		if err == nil {
 			return hdfsClient, nil
 		}
-		log.Printf("Failed to connect to HDFS (attempt %d/%d): %v", i+1, maxRetries, err)
+		logger.Warn(logger.EventDBError, "Failed to connect to HDFS, retrying", logger.Fields(
+			"attempt", i+1,
+			"max_retries", maxRetries,
+			"error", err.Error(),
+		))
 		time.Sleep(time.Duration(i+1) * 2 * time.Second)
 	}
 	return nil, err
@@ -29,15 +33,30 @@ func connectWithRetry(namenodeAddr string, maxRetries int) (*hdfs.Client, error)
 func main() {
 	cfg := config.Load()
 
+	logger.Init(logger.Config{
+		ServiceName: "storage-service",
+		LogFilePath: cfg.LogFilePath,
+		HMACKey:     cfg.LogHMACKey,
+		MaxSizeMB:   cfg.LogMaxSizeMB,
+		MaxBackups:  cfg.LogMaxBackups,
+		MaxAgeDays:  cfg.LogMaxAgeDays,
+	})
+
+	logger.Info(logger.EventServiceStartup, "Storage service starting", logger.Fields(
+		"port", cfg.Port,
+	))
+
 	hdfsClient, err := connectWithRetry(cfg.HDFSNamenode, 10)
 	if err != nil {
-		log.Fatalf("Failed to connect to HDFS after retries: %v", err)
+		logger.Fatal(logger.EventDBError, "Failed to connect to HDFS after retries", logger.Fields("error", err.Error()))
 	}
 	defer hdfsClient.Close()
 
 	if err := hdfsClient.EnsureBaseDir(); err != nil {
-		log.Fatalf("Failed to create base directory in HDFS: %v", err)
+		logger.Fatal(logger.EventDBError, "Failed to create base directory in HDFS", logger.Fields("error", err.Error()))
 	}
+
+	logger.Info(logger.EventDBConnection, "Connected to HDFS successfully", nil)
 
 	storageHandler := handler.NewStorageHandler(hdfsClient)
 
@@ -65,8 +84,8 @@ func main() {
 		admin.GET("/stats", storageHandler.GetStats)
 	}
 
-	log.Printf("Storage service starting on port %s", cfg.Port)
+	logger.Info(logger.EventServiceStartup, "Server starting", logger.Fields("port", cfg.Port))
 	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		logger.Fatal(logger.EventGeneral, "Failed to start server", logger.Fields("error", err.Error()))
 	}
 }

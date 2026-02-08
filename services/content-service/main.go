@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/annazecevic/content-service/config"
 	"github.com/annazecevic/content-service/handler"
+	"github.com/annazecevic/content-service/logger"
 	"github.com/annazecevic/content-service/middleware"
 	"github.com/annazecevic/content-service/repository"
 	"github.com/annazecevic/content-service/service"
@@ -20,13 +20,28 @@ import (
 func main() {
 	cfg := config.Load()
 
+	logger.Init(logger.Config{
+		ServiceName: "content-service",
+		LogFilePath: cfg.LogFilePath,
+		HMACKey:     cfg.LogHMACKey,
+		MaxSizeMB:   cfg.LogMaxSizeMB,
+		MaxBackups:  cfg.LogMaxBackups,
+		MaxAgeDays:  cfg.LogMaxAgeDays,
+	})
+
+	logger.Info(logger.EventServiceStartup, "Content service starting", logger.Fields(
+		"port", cfg.ServerPort,
+	))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.MongoURI))
 	if err != nil {
-		log.Fatal("failed to connect to mongo:", err)
+		logger.Fatal(logger.EventDBError, "Failed to connect to MongoDB", logger.Fields("error", err.Error()))
 	}
 	db := client.Database(cfg.MongoDB)
+
+	logger.Info(logger.EventDBConnection, "Connected to MongoDB successfully", nil)
 
 	repo := repository.NewContentRepository(db)
 	svc := service.NewContentService(repo)
@@ -54,8 +69,8 @@ func main() {
 	h.RegisterRoutes(r)
 
 	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Printf("Starting content-service on %s", addr)
+	logger.Info(logger.EventServiceStartup, "Server starting", logger.Fields("address", addr))
 	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatal(err)
+		logger.Fatal(logger.EventGeneral, "Failed to start server", logger.Fields("error", err.Error()))
 	}
 }

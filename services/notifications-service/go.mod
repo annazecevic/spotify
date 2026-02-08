@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gocql/gocql v1.6.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

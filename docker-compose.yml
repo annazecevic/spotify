@@ -27,6 +27,10 @@ services:
       MONGO_DATABASE: spotify_users
       SERVER_PORT: 8080
       ENVIRONMENT: development
+      LOG_FILE_PATH: /var/log/user-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - user_service_logs:/var/log/user-service
     depends_on:
       - mongodb
     networks:
@@ -41,6 +45,11 @@ services:
       - "8081:8081"
     env_file:
       - ./services/content-service/.env
+    environment:
+      LOG_FILE_PATH: /var/log/content-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - content_service_logs:/var/log/content-service
     depends_on:
       - mongodb
     networks:
@@ -74,6 +83,11 @@ services:
       - "8082:8082"
     env_file:
       - ./services/notifications-service/.env
+    environment:
+      LOG_FILE_PATH: /var/log/notifications-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - notifications_service_logs:/var/log/notifications-service
     depends_on:
       cassandra:
         condition: service_healthy
@@ -154,6 +168,11 @@ services:
       - "8084:8084"
     env_file:
       - ./services/storage-service/.env
+    environment:
+      LOG_FILE_PATH: /var/log/storage-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - storage_service_logs:/var/log/storage-service
     depends_on:
       - namenode
       - datanode1
@@ -171,3 +190,7 @@ volumes:
   hadoop_namenode:
   hadoop_datanode1:
   hadoop_datanode2:
+  user_service_logs:
+  content_service_logs:
+  notifications_service_logs:
+  storage_service_logs:
