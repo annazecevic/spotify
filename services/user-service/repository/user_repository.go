@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "github.com/annazecevic/user-service/domain"
+	"github.com/annazecevic/user-service/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -53,6 +54,12 @@ func (r *userRepository) Create(ctx context.Context, user *domain.User) error {
 	defer cancel()
 
 	_, err := r.collection.InsertOne(ctx, user)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to create user", logger.Fields(
+			"user_id", user.ID,
+			"error", err.Error(),
+		))
+	}
 	return err
 }
 
@@ -129,8 +136,24 @@ func (r *userRepository) UpdateConfirmation(ctx context.Context, userID string) 
 		},
 	}
 
-	_, err := r.collection.UpdateOne(ctx, bson.M{"id": userID}, update)
-	return err
+	result, err := r.collection.UpdateOne(ctx, bson.M{"id": userID}, update)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to update email confirmation", logger.Fields(
+			"user_id", userID,
+			"error", err.Error(),
+		))
+		return err
+	}
+
+	// Pokušaj potvrde emaila za korisnika koji ne postoji u bazi
+	if result.MatchedCount == 0 {
+		logger.Security(logger.EventStateChange, "Email confirmation attempted for non-existent user", logger.Fields(
+			"user_id", userID,
+		))
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }
 
 func (r *userRepository) FindByMagicLinkToken(ctx context.Context, token string) (*domain.User, error) {
@@ -153,6 +176,22 @@ func (r *userRepository) Update(ctx context.Context, user *domain.User) error {
 		"$set": user,
 	}
 
-	_, err := r.collection.UpdateOne(ctx, bson.M{"id": user.ID}, update)
-	return err
+	result, err := r.collection.UpdateOne(ctx, bson.M{"id": user.ID}, update)
+	if err != nil {
+		logger.Error(logger.EventDBError, "Failed to update user", logger.Fields(
+			"user_id", user.ID,
+			"error", err.Error(),
+		))
+		return err
+	}
+
+	// Pokušaj ažuriranja korisnika koji ne postoji - neočekivano stanje
+	if result.MatchedCount == 0 {
+		logger.Security(logger.EventStateChange, "Update attempted for non-existent user", logger.Fields(
+			"user_id", user.ID,
+		))
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }
