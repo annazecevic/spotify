@@ -1,7 +1,5 @@
-# Security Architecture — Spotify Clone
+# Security Architecture
 
-**Security Lead** · Defensive design for a distributed media platform  
----
 
 ## 1. Introduction: Security Philosophy
 
