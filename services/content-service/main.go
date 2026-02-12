@@ -22,6 +22,7 @@ func main() {
 
 	logger.Init(logger.Config{
 		ServiceName: "content-service",
+		Environment: cfg.Environment,
 		LogFilePath: cfg.LogFilePath,
 		HMACKey:     cfg.LogHMACKey,
 		MaxSizeMB:   cfg.LogMaxSizeMB,
