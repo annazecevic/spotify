@@ -6,9 +6,10 @@ import (
 )
 
 type Config struct {
-	MongoURI   string
-	MongoDB    string
-	ServerPort string
+	MongoURI    string
+	MongoDB     string
+	ServerPort  string
+	Environment string
 
 	// Logging
 	LogFilePath   string
@@ -20,9 +21,10 @@ type Config struct {
 
 func Load() *Config {
 	c := &Config{
-		MongoURI:   getEnv("MONGO_URI", "mongodb://mongodb:27017"),
-		MongoDB:    getEnv("MONGO_DATABASE", "content_db"),
-		ServerPort: getEnv("SERVER_PORT", "8081"),
+		MongoURI:    getEnv("MONGO_URI", "mongodb://mongodb:27017"),
+		MongoDB:     getEnv("MONGO_DATABASE", "content_db"),
+		ServerPort:  getEnv("SERVER_PORT", "8081"),
+		Environment: getEnv("ENVIRONMENT", "development"),
 
 		LogFilePath:   getEnv("LOG_FILE_PATH", "/var/log/content-service/app.log"),
 		LogHMACKey:    getEnv("LOG_HMAC_KEY", "default-hmac-key-change-in-production"),

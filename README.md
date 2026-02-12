@@ -216,3 +216,258 @@ Additional roadmap items may include: formal dependency and vulnerability scanni
 The Spotify Clone applies a **defense-in-depth**, **security-first** approach across authentication (HTTPS, BCrypt, JWT), authorization (RBAC on every protected request), availability (rate limiting and DoS controls), and input validation (whitelisting, sanitization, XSS/SQL pattern checks). The system is built as a **distributed, environment-isolated** set of services behind a hardened reverse proxy, with a clear **threat model** aligned to OWASP Top 10 and a **security roadmap** focused on centralized logging/monitoring and MFA.
 
 ---
+
+## 7. Vulnerability Analysis (Requirement 2.21)
+
+This section summarizes the **vulnerability analysis** of the application. It describes:
+
+- which **tools** were used
+- which **vulnerabilities** were identified (per service)
+- how they could theoretically be **exploited**
+- how we **fixed** them or how to **mitigate** them
+- how to **reproduce** the scans (commands), so screenshots can be taken for the report
+
+### 7.1 Tools Used
+
+- **gosec** (SecureGo SAST for Go)  
+  Static code analysis of each Go service (user, content, notifications, storage).  
+  Focus: common security issues (integer overflows, file access, unhandled errors, secrets, etc.).
+
+- **govulncheck** (Go official vulnerability scanner)  
+  Checks Go modules (`go.mod`) for dependencies with known CVEs and verifies if the project’s code actually calls the vulnerable symbols.
+
+> Note: Tools were executed via Docker containers so that no local Go toolchain was required.
+
+### 7.2 How to Run the Scans (Commands)
+
+All commands are run from the project root: `C:\Users\seva0\Desktop\spotify`.
+
+#### 7.2.1 `gosec` — per service
+
+**user-service**
+
+```powershell
+docker run --rm -v "${PWD}:/src" -w /src/services/user-service securego/gosec `
+    -fmt=json -out=/src/gosec-user-service ./...
+```
+
+**content-service**
+
+```powershell
+docker run --rm -v "${PWD}:/src" -w /src/services/content-service securego/gosec `
+    -fmt=json -out=/src/gosec-content-service ./...
+```
+
+**notifications-service**
+
+```powershell
+docker run --rm -v "${PWD}:/src" -w /src/services/notifications-service securego/gosec `
+    -fmt=json -out=/src/gosec-notifications-service ./...
+```
+
+**storage-service**
+
+```powershell
+docker run --rm -v "${PWD}:/src" -w /src/services/storage-service securego/gosec `
+    -fmt=json -out=/src/gosec-storage-service ./...
+```
+
+The JSON outputs (`gosec-*.…`) were used to extract the findings described below.  
+Screenshots for the report can be taken directly from the PowerShell console while these commands run.
+
+#### 7.2.2 `govulncheck` — per service (after `go mod tidy`)
+
+Because each service is its own Go module, we ran `govulncheck` in the context of each service, using Go 1.24 (matching `go.mod`).
+
+**user-service**
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app/services/user-service golang:1.24 `
+  sh -c "go mod tidy && \
+         go install golang.org/x/vuln/cmd/govulncheck@latest && \
+         /go/bin/govulncheck ./... > /app/govuln-user-service.txt"
+```
+
+**content-service**
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app/services/content-service golang:1.24 `
+  sh -c "go mod tidy && \
+         go install golang.org/x/vuln/cmd/govulncheck@latest && \
+         /go/bin/govulncheck ./... > /app/govuln-content-service.txt"
+```
+
+**notifications-service**
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app/services/notifications-service golang:1.24 `
+  sh -c "go mod tidy && \
+         go install golang.org/x/vuln/cmd/govulncheck@latest && \
+         /go/bin/govulncheck ./... > /app/govuln-notifications-service.txt"
+```
+
+**storage-service**
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app/services/storage-service golang:1.24 `
+  sh -c "go mod tidy && \
+         go install golang.org/x/vuln/cmd/govulncheck@latest && \
+         /go/bin/govulncheck ./... > /app/govuln-storage-service.txt"
+```
+
+The `govuln-*.txt` files contain the module‑level vulnerability reports which we summarize next.
+
+### 7.3 Findings from `gosec`
+
+#### 7.3.1 Common patterns in all services (loggers)
+
+- **G304 – Potential file inclusion via variable (MEDIUM)**  
+  - Files: `services/*-service/logger/logger.go`  
+  - Code: `os.OpenFile(path, ...)` in `ensureFilePermissions(path string)`  
+  - **Explanation**: gosec warns whenever a file is opened with a variable path. In our case, the path comes from configuration (`LOG_FILE_PATH`), not from user input.  
+  - **Potential exploitation**: If an attacker could control `LOG_FILE_PATH` (e.g. by changing container environment), they could redirect logs to an unexpected file. This is an *operational* risk rather than an application bug.  
+  - **Mitigation**:
+    - Keep environment variables under operational control (no user influence).
+    - Optionally validate that `LOG_FILE_PATH` stays under `/var/log/<service>/` before opening the file.
+
+- **G104 – Errors unhandled (LOW)**  
+  - Files: `logger/logger.go` in all services.  
+  - Examples:
+    - Ignoring error from `l.writer.Write(...)` (log write).
+    - Ignoring error from `os.Chmod(path, 0600)` or `f.Close()`.  
+  - **Explanation**: If these operations fail, we do not log a second error. This is about robustness of logging, not about a direct security breach.  
+  - **Mitigation** (optional, if desired):
+    - Wrap these calls with `if err != nil { fmt.Fprintf(os.Stderr, "log write failed: %v\n", err) }` to record failures to stderr.
+
+- **G117 – “Secret‑looking” struct fields (MEDIUM)**  
+  - Files:
+    - `user-service/dto/user_dto.go` (`Password` fields)
+    - `user-service/domain/user.go` (`Password` field)
+    - `user-service/config/config.go`, `notifications-service/config/config.go`, `storage-service/config/config.go` (`JWTSecret` field)  
+  - **Explanation**: gosec flags any struct field whose name or JSON tag looks like a secret. This is a reminder, not a direct vulnerability.  
+  - **Mitigation / Current state**:
+    - These fields are **never logged in clear text**: the logging layer redacts `password`, `token`, `jwt`, etc.
+    - Response DTOs do not expose password or JWT secrets back to the client.
+
+#### 7.3.2 user-service specific (G115)
+
+- **G115 – Integer overflow conversion int → rune (HIGH)**  
+  - File: `services/user-service/middleware/validation_middleware.go`  
+  - Code created messages using `string(rune(length))`, `string(rune(min))`, `string(rune(max))`.  
+  - **Explanation**: Converting integers to `rune` and then to string can produce unexpected characters if the number is large. In practice, we use small lengths, but the pattern is considered unsafe.  
+  - **Potential exploitation**: This does not directly allow an attacker to break security; at worst it can cause confusing error messages or strange characters if validation ranges were misconfigured.  
+  - **Mitigation**:
+    - Replace `string(rune(min))` / `string(rune(max))` with safe integer‑to‑string conversions (`strconv.Itoa(min)` etc.).
+
+#### 7.3.3 content-service specific (G115, G114)
+
+- **G115 – Integer overflow conversion int → rune (HIGH)**  
+  - File: `services/content-service/handler/content_handler.go`  
+  - Code: building messages like `"must be between " + string(rune(min+'0')) + " and " + string(rune(max+'0')) + " characters"`.  
+  - **Explanation / mitigation**: Same pattern as in user-service; fix is to use `strconv.Itoa(min)` / `strconv.Itoa(max)` instead of rune conversions.
+
+- **G114 – net/http server without timeouts (MEDIUM)**  
+  - File: `services/content-service/main.go`  
+  - Code: `http.ListenAndServe(addr, r)` with no custom `http.Server` timeouts.  
+  - **Potential exploitation**: In theory, a malicious client could open slow connections and keep them alive, consuming resources (slowloris-style attack).  
+  - **Mitigation** (recommended improvement):
+    - Replace `http.ListenAndServe` with an `http.Server` that sets `ReadTimeout`, `WriteTimeout`, `IdleTimeout` to reasonable values (e.g. 10–30 seconds).
+    - Note that we already have rate limiting at Nginx and app level, which reduces practical impact.
+
+#### 7.3.4 storage-service specific (G115, extra G104)
+
+- **G115 – Integer overflow conversion uint64 → int64 (HIGH)**  
+  - File: `services/storage-service/hdfs/client.go`  
+  - Code: `availableSpace = int64(fsInfo.Remaining)`.  
+  - **Explanation**: If `fsInfo.Remaining` is extremely large (close to `math.MaxUint64`), conversion to `int64` can overflow. In practice, HDFS reports realistic sizes, but the pattern is unsafe.  
+  - **Potential exploitation**: An attacker with control over HDFS metadata could try to spoof remaining space to trick the application into thinking there is more/less space than there really is. This is unlikely in our controlled environment.  
+  - **Mitigation**:
+    - Check bounds before conversion (e.g. if `fsInfo.Remaining > math.MaxInt64` then clamp to `math.MaxInt64` or treat as error).
+
+- **Extra G104s in storage-service**  
+  - Some calls to `io.Copy` and `c.client.Remove(path)` ignore returned errors.  
+  - **Mitigation**: As with loggers, add basic error handling to log or handle failures where needed.
+
+#### 7.3.5 notifications-service specific
+
+- Only the generic logger findings (G304, G104) and one G117 on `JWTSecret` in config.  
+- **No high-risk, direct exploitability findings** in the notifications service logic itself.
+
+### 7.4 Findings from `govulncheck` (Dependencies)
+
+Here we summarize only vulnerabilities that `govulncheck` reports as **actually reached by our code** (symbol-level findings).
+
+#### 7.4.1 user-service — GO-2025-3595 (`golang.org/x/net`)
+
+- **ID**: `GO-2025-3595`  
+- **Module**: `golang.org/x/net`  
+- **Found in**: `golang.org/x/net@v0.30.0`  
+- **Fixed in**: `golang.org/x/net@v0.38.0`  
+- **Trace example**: From `handler/user_handler.go` via `gin.Context.ShouldBindJSON` to `html.Tokenizer.Next`.  
+- **Risk (simplified)**:
+  - The vulnerability is about incorrect neutralization of input during HTML parsing in `x/net`.  
+  - In some setups this could help an attacker craft content that bypasses HTML sanitization or causes unexpected parsing behavior (XSS-like issues).
+- **Mitigation applied**:
+  - Updated `services/user-service/go.mod` to use:
+    - `golang.org/x/net v0.38.0` (fixed version).
+  - After this change, a new `govulncheck` scan no longer reports `GO-2025-3595` for user-service.
+
+#### 7.4.2 content-service — GO-2024-2687 (HTTP/2 CONTINUATION flood)
+
+- **ID**: `GO-2024-2687`  
+- **Module**: `golang.org/x/net`  
+- **Found in**: `golang.org/x/net@v0.10.0`  
+- **Fixed in**: `golang.org/x/net@v0.23.0`  
+- **Trace example**: Through net/http HTTP/2 internals used indirectly by MongoDB driver and other components.  
+- **Risk (simplified)**:
+  - Vulnerability in HTTP/2 handling that can allow a remote attacker to send specially crafted frames and cause **resource exhaustion (DoS)** on the server.
+- **Mitigation applied**:
+  - Updated `services/content-service/go.mod` to use:
+    - `golang.org/x/net v0.23.0` (minimum fixed version from advisory; newer versions are also acceptable).
+  - Combined with existing rate limiting at Nginx and app level, this significantly reduces DoS risk from HTTP/2 continuation flood.
+
+#### 7.4.3 notifications-service — no reachable vulnerabilities
+
+- `govulncheck` result:
+  - `Your code is affected by 0 vulnerabilities.`  
+  - It did find some vulnerabilities in transitive modules, but none are reachable from our code paths according to the call graph.
+- **Mitigation**:
+  - Keep dependencies updated over time.
+  - Optionally review transitive findings if stricter compliance is required.
+
+#### 7.4.4 storage-service — GO-2025-3553 (`github.com/golang-jwt/jwt/v5`)
+
+- **ID**: `GO-2025-3553`  
+- **Module**: `github.com/golang-jwt/jwt/v5`  
+- **Found in**: `github.com/golang-jwt/jwt/v5@v5.2.1`  
+- **Fixed in**: `github.com/golang-jwt/jwt/v5@v5.2.2` (and later)  
+- **Trace example**: `middleware/middleware.go` calls `jwt.ParseWithClaims`, which reaches `jwt.Parser.ParseUnverified`.  
+- **Risk (simplified)**:
+  - The issue allows **excessive memory allocation** when parsing specially crafted JWT headers.  
+  - An attacker could send many malicious JWTs to try to exhaust memory and cause a DoS on the storage-service.
+- **Mitigation applied**:
+  - Updated `services/storage-service/go.mod` to use:
+    - `github.com/golang-jwt/jwt/v5 v5.3.0` (version without this vulnerability, same as user-service).
+  - Storage-service is also protected by JWT validation middleware and by Nginx rate limiting, which further reduces practical DoS impact.
+
+### 7.5 Overall Security Level and Protection Against Exploitation
+
+Summarizing all the above:
+
+- **Static code issues (gosec)** are mostly **low to medium risk**: unsafe integer‑to‑rune conversions in error messages, unhandled errors in logging and HDFS client, and generic warnings about file paths and secret‑like struct fields. These do not directly allow an attacker to take over the system, but they highlight areas where code quality and robustness can be improved.
+- **Dependency vulnerabilities (govulncheck)** surfaced **three relevant issues**:
+  - `GO-2025-3595` (`golang.org/x/net`) in user-service.
+  - `GO-2024-2687` (HTTP/2 continuation flood) in content-service.
+  - `GO-2025-3553` (`github.com/golang-jwt/jwt/v5`) in storage-service.
+  All three have been mitigated by **upgrading to fixed dependency versions** in the corresponding `go.mod` files.
+- The existing **defense-in-depth mechanisms** (TLS, RBAC, rate limiting, input validation, sanitized logging, and secure configuration) already provide strong protection against common web attacks (XSS, injection, brute-force, DoS). The dependency upgrades further close known CVE gaps.
+
+For the 2.21 requirement, this README now documents:
+
+- **Which tools** were used (`gosec`, `govulncheck` and how to run them).
+- **Which vulnerabilities** were identified (with IDs and affected modules).
+- **How they might be exploited** in simple terms (XSS-like parsing bugs, HTTP/2 DoS, JWT parsing DoS).
+- **How they were fixed** (dependency upgrades, recommended code changes).
+- **How to protect the system going forward** (repeat scans regularly, keep modules updated, refine error handling and validation as part of ongoing hardening).
+
+Screenshots of the `gosec` and `govulncheck` terminal output can be added below this section or in a separate document to visually support the report and defense presentation.
