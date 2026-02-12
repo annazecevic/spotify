@@ -215,7 +215,7 @@ The Spotify Clone applies a **defense-in-depth**, **security-first** approach ac
 
 ---
 
-## 7. Vulnerability Analysis (Requirement 2.21)
+## 7. Vulnerability Analysis 
 
 This section summarizes the **vulnerability analysis** of the application. It describes:
 
@@ -440,13 +440,11 @@ Here we summarize only vulnerabilities that `govulncheck` reports as **actually 
 - **Found in**: `github.com/golang-jwt/jwt/v5@v5.2.1`  
 - **Fixed in**: `github.com/golang-jwt/jwt/v5@v5.2.2` (and later)  
 - **Trace example**: `middleware/middleware.go` calls `jwt.ParseWithClaims`, which reaches `jwt.Parser.ParseUnverified`.  
-- **Risk (simplified)**:
-  - The issue allows **excessive memory allocation** when parsing specially crafted JWT headers.  
+- **Risk**:
   - An attacker could send many malicious JWTs to try to exhaust memory and cause a DoS on the storage-service.
 - **Mitigation applied**:
   - Updated `services/storage-service/go.mod` to use:
     - `github.com/golang-jwt/jwt/v5 v5.3.0` (version without this vulnerability, same as user-service).
-  - Storage-service is also protected by JWT validation middleware and by Nginx rate limiting, which further reduces practical DoS impact.
 
 ### 7.5 Overall Security Level and Protection Against Exploitation
 
@@ -460,12 +458,3 @@ Summarizing all the above:
   All three have been mitigated by **upgrading to fixed dependency versions** in the corresponding `go.mod` files.
 - The existing **defense-in-depth mechanisms** (TLS, RBAC, rate limiting, input validation, sanitized logging, and secure configuration) already provide strong protection against common web attacks (XSS, injection, brute-force, DoS). The dependency upgrades further close known CVE gaps.
 
-For the 2.21 requirement, this README now documents:
-
-- **Which tools** were used (`gosec`, `govulncheck` and how to run them).
-- **Which vulnerabilities** were identified (with IDs and affected modules).
-- **How they might be exploited** in simple terms (XSS-like parsing bugs, HTTP/2 DoS, JWT parsing DoS).
-- **How they were fixed** (dependency upgrades, recommended code changes).
-- **How to protect the system going forward** (repeat scans regularly, keep modules updated, refine error handling and validation as part of ongoing hardening).
-
-Screenshots of the `gosec` and `govulncheck` terminal output can be added below this section or in a separate document to visually support the report and defense presentation.
