@@ -24,6 +24,7 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 	g := r.Group("/content")
 
 	g.GET("/genres", h.ListGenres)
+	g.GET("/genres/:id", h.GetGenre)
 	g.GET("/artists", h.ListArtists)
 	g.GET("/artists/search", h.SearchArtists)
 	g.GET("/artists/:id", h.GetArtist)
@@ -113,6 +114,25 @@ func (h *ContentHandler) ListGenres(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *ContentHandler) GetGenre(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "genre id is required"})
+		return
+	}
+
+	genre, err := h.svc.GetGenreByID(c.Request.Context(), id)
+	if err != nil {
+		if err.Error() == "genre not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, genre)
 }
 
 func (h *ContentHandler) GetArtist(c *gin.Context) {

@@ -12,6 +12,7 @@ import (
 type ContentService interface {
 	CreateGenre(ctx context.Context, g *domain.Genre) error
 	ListGenres(ctx context.Context) ([]*domain.Genre, error)
+	GetGenreByID(ctx context.Context, id string) (*domain.Genre, error)
 
 	CreateArtist(ctx context.Context, a *domain.Artist) error
 	ListArtists(ctx context.Context) ([]*domain.Artist, error)
@@ -46,6 +47,17 @@ func (s *contentService) CreateGenre(ctx context.Context, g *domain.Genre) error
 
 func (s *contentService) ListGenres(ctx context.Context) ([]*domain.Genre, error) {
 	return s.repo.ListGenres(ctx)
+}
+
+func (s *contentService) GetGenreByID(ctx context.Context, id string) (*domain.Genre, error) {
+	genre, err := s.repo.FindGenreByID(ctx, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("genre not found")
+		}
+		return nil, err
+	}
+	return genre, nil
 }
 
 func (s *contentService) CreateArtist(ctx context.Context, a *domain.Artist) error {
