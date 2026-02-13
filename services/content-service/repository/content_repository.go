@@ -14,6 +14,7 @@ import (
 type ContentRepository interface {
 	CreateGenre(ctx context.Context, g *domain.Genre) error
 	ListGenres(ctx context.Context) ([]*domain.Genre, error)
+	FindGenreByID(ctx context.Context, id string) (*domain.Genre, error)
 
 	CreateArtist(ctx context.Context, a *domain.Artist) error
 	ListArtists(ctx context.Context) ([]*domain.Artist, error)
@@ -92,6 +93,17 @@ func (r *contentRepository) ListGenres(ctx context.Context) ([]*domain.Genre, er
 		out = append(out, &g)
 	}
 	return out, nil
+}
+
+func (r *contentRepository) FindGenreByID(ctx context.Context, id string) (*domain.Genre, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var g domain.Genre
+	err := r.genresCol.FindOne(ctx, bson.M{"id": id}).Decode(&g)
+	if err != nil {
+		return nil, err
+	}
+	return &g, nil
 }
 
 func (r *contentRepository) CreateArtist(ctx context.Context, a *domain.Artist) error {
