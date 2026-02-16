@@ -87,7 +87,6 @@ func (s *userService) Register(ctx context.Context, req *dto.RegisterUserRequest
 		return nil, errors.New("user with this username already exists")
 	}
 
-	// Hash password with salt (2.19 - bcrypt automatically adds salt)
 	// DefaultCost = 10, which provides good security vs performance balance
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {

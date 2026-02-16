@@ -10,6 +10,7 @@ type Config struct {
 	HDFSNamenode string
 	JWTSecret    string
 	MaxFileSize  int64
+	Environment  string
 
 	// Logging
 	LogFilePath   string
@@ -24,7 +25,8 @@ func Load() *Config {
 		Port:         getEnv("PORT", "8084"),
 		HDFSNamenode: getEnv("HDFS_NAMENODE", "namenode:9000"),
 		JWTSecret:    getEnv("JWT_SECRET", "your-secret-key"),
-		MaxFileSize:  50 * 1024 * 1024, // 50MB max file size
+		MaxFileSize:  50 * 1024 * 1024,
+		Environment:  getEnv("ENVIRONMENT", "development"),
 
 		LogFilePath:   getEnv("LOG_FILE_PATH", "/var/log/storage-service/app.log"),
 		LogHMACKey:    getEnv("LOG_HMAC_KEY", "default-hmac-key-change-in-production"),

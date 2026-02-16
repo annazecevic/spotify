@@ -1,0 +1,202 @@
+{
+	"Golang errors": {
+		"/src/services/user-service/logger/logger.go": [
+			{
+				"line": 17,
+				"column": 2,
+				"error": "could not import gopkg.in/natefinch/lumberjack.v2 (invalid package name: \"\")"
+			},
+			{
+				"line": 152,
+				"column": 18,
+				"error": "undefined: lumberjack"
+			}
+		]
+	},
+	"Issues": [
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e rune",
+			"file": "/src/services/user-service/middleware/validation_middleware.go",
+			"code": "98: \t\t\tMessage: string(rune(length)) + \" characters - must be between \" + \n99: \t\t\t\tstring(rune(min)) + \" and \" + string(rune(max)),\n100: \t\t}\n",
+			"line": "99",
+			"column": "16",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e rune",
+			"file": "/src/services/user-service/middleware/validation_middleware.go",
+			"code": "98: \t\t\tMessage: string(rune(length)) + \" characters - must be between \" + \n99: \t\t\t\tstring(rune(min)) + \" and \" + string(rune(max)),\n100: \t\t}\n",
+			"line": "99",
+			"column": "46",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "HIGH",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "190",
+				"url": "https://cwe.mitre.org/data/definitions/190.html"
+			},
+			"rule_id": "G115",
+			"details": "integer overflow conversion int -\u003e rune",
+			"file": "/src/services/user-service/middleware/validation_middleware.go",
+			"code": "97: \t\treturn \u0026ValidationError{\n98: \t\t\tMessage: string(rune(length)) + \" characters - must be between \" + \n99: \t\t\t\tstring(rune(min)) + \" and \" + string(rune(max)),\n",
+			"line": "98",
+			"column": "24",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "22",
+				"url": "https://cwe.mitre.org/data/definitions/22.html"
+			},
+			"rule_id": "G304",
+			"details": "Potential file inclusion via variable",
+			"file": "/src/services/user-service/logger/logger.go",
+			"code": "170: func ensureFilePermissions(path string) {\n171: \tf, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)\n172: \tif err == nil {\n",
+			"line": "171",
+			"column": "12",
+			"nosec": false,
+			"suppressions": null,
+			"autofix": "Consider using os.Root to scope file access under a fixed root (Go \u003e=1.24). Prefer root.Open/root.Stat over os.Open/os.Stat to prevent directory traversal."
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "499",
+				"url": "https://cwe.mitre.org/data/definitions/499.html"
+			},
+			"rule_id": "G117",
+			"details": "Exported struct field \"Password\" (JSON key \"password\") matches secret pattern",
+			"file": "/src/services/user-service/dto/user_dto.go",
+			"code": "28: \tIdentifier string `json:\"identifier\" binding:\"required\"`\n29: \tPassword   string `json:\"password\" binding:\"required\"`\n30: }\n",
+			"line": "29",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "499",
+				"url": "https://cwe.mitre.org/data/definitions/499.html"
+			},
+			"rule_id": "G117",
+			"details": "Exported struct field \"Password\" (JSON key \"password\") matches secret pattern",
+			"file": "/src/services/user-service/dto/user_dto.go",
+			"code": "7: \tEmail    string `json:\"email\" binding:\"required,email\"`\n8: \tPassword string `json:\"password\" binding:\"required\"`\n9: }\n",
+			"line": "8",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "499",
+				"url": "https://cwe.mitre.org/data/definitions/499.html"
+			},
+			"rule_id": "G117",
+			"details": "Exported struct field \"Password\" (JSON key \"Password\") matches secret pattern",
+			"file": "/src/services/user-service/domain/user.go",
+			"code": "8: \tUsername            string `bson:\"username\"`\n9: \tPassword            string `bson:\"password\"`\n10: \tConfirmed           bool   `bson:\"confirmed\"`\n",
+			"line": "9",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "MEDIUM",
+			"confidence": "MEDIUM",
+			"cwe": {
+				"id": "499",
+				"url": "https://cwe.mitre.org/data/definitions/499.html"
+			},
+			"rule_id": "G117",
+			"details": "Exported struct field \"JWTSecret\" (JSON key \"JWTSecret\") matches secret pattern",
+			"file": "/src/services/user-service/config/config.go",
+			"code": "15: \tEnvironment   string\n16: \tJWTSecret     string\n17: \tSMTPHost      string\n",
+			"line": "16",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/src/services/user-service/logger/logger.go",
+			"code": "199: \n200: \tl.writer.Write(append(data, '\\n'))\n201: }\n",
+			"line": "200",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/src/services/user-service/logger/logger.go",
+			"code": "174: \t}\n175: \tos.Chmod(path, 0600)\n176: }\n",
+			"line": "175",
+			"column": "2",
+			"nosec": false,
+			"suppressions": null
+		},
+		{
+			"severity": "LOW",
+			"confidence": "HIGH",
+			"cwe": {
+				"id": "703",
+				"url": "https://cwe.mitre.org/data/definitions/703.html"
+			},
+			"rule_id": "G104",
+			"details": "Errors unhandled",
+			"file": "/src/services/user-service/logger/logger.go",
+			"code": "172: \tif err == nil {\n173: \t\tf.Close()\n174: \t}\n",
+			"line": "173",
+			"column": "3",
+			"nosec": false,
+			"suppressions": null
+		}
+	],
+	"Stats": {
+		"files": 16,
+		"lines": 2973,
+		"nosec": 0,
+		"found": 11
+	},
+	"GosecVersion": "dev"
+}
