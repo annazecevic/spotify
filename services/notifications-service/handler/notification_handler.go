@@ -2,8 +2,10 @@ package handler
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/annazecevic/notifications-service/logger"
+	"github.com/annazecevic/notifications-service/middleware"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/gin-gonic/gin"
 )
@@ -19,15 +21,55 @@ func NewNotificationHandler(service service.NotificationService) *NotificationHa
 }
 
 func (h *NotificationHandler) GetUserNotifications(c *gin.Context) {
+	rawQuery, _ := url.QueryUnescape(c.Request.URL.RawQuery)
+	if middleware.CheckXSSPatterns(rawQuery) || middleware.CheckSQLInjectionPatterns(rawQuery) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in query string", logger.Fields(
+			"ip", c.ClientIP(),
+			"raw_query", rawQuery,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
+	queryUserID := c.Query("user_id")
+	if queryUserID != "" {
+		if middleware.CheckXSSPatterns(queryUserID) || middleware.CheckSQLInjectionPatterns(queryUserID) {
+			logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in user_id query parameter", logger.Fields(
+				"ip", c.ClientIP(),
+				"user_id", queryUserID,
+			))
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+			return
+		}
+	}
+
 	userID := c.GetHeader("X-User-ID")
 	if userID == "" {
-		userID = c.Query("user_id")
+		userID = queryUserID
 	}
 	if userID == "" {
 		logger.Warn(logger.EventValidationFailure, "Missing user_id in notification request", logger.Fields(
 			"ip", c.ClientIP(),
 		))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		return
+	}
+
+	if middleware.CheckXSSPatterns(userID) || middleware.CheckSQLInjectionPatterns(userID) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in user_id", logger.Fields(
+			"ip", c.ClientIP(),
+			"user_id", userID,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
+	userID = middleware.SanitizeString(userID)
+	if userID == "" {
+		logger.Warn(logger.EventValidationFailure, "user_id became empty after sanitization", logger.Fields(
+			"ip", c.ClientIP(),
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
 		return
 	}
 

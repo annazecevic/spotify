@@ -3,6 +3,7 @@ package handler
 import (
 	"html"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/annazecevic/content-service/domain"
@@ -267,6 +268,15 @@ func (h *ContentHandler) SearchArtists(c *gin.Context) {
 	query := c.Query("q")
 	genreID := c.Query("genre")
 
+	if middleware.CheckXSSPatterns(query) || middleware.CheckSQLInjectionPatterns(query) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in artist search query", logger.Fields(
+			"ip", c.ClientIP(),
+			"query", query,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
 	query = sanitizeInput(query)
 	genreID = sanitizeInput(genreID)
 
@@ -421,7 +431,27 @@ func (h *ContentHandler) CreateAlbum(c *gin.Context) {
 }
 
 func (h *ContentHandler) SearchAlbums(c *gin.Context) {
+	rawQuery, _ := url.QueryUnescape(c.Request.URL.RawQuery)
+	if middleware.CheckXSSPatterns(rawQuery) || middleware.CheckSQLInjectionPatterns(rawQuery) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in album search raw query", logger.Fields(
+			"ip", c.ClientIP(),
+			"raw_query", rawQuery,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
 	query := c.Query("q")
+
+	if middleware.CheckXSSPatterns(query) || middleware.CheckSQLInjectionPatterns(query) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in album search query", logger.Fields(
+			"ip", c.ClientIP(),
+			"query", query,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
 	query = sanitizeInput(query)
 
 	out, err := h.svc.SearchAlbums(c.Request.Context(), query)
@@ -508,16 +538,36 @@ func generateID() string {
 }
 
 func sanitizeInput(input string) string {
-	sanitized := html.EscapeString(input)
-	sanitized = strings.TrimSpace(sanitized)
-	if middleware.CheckXSSPatterns(sanitized) || middleware.CheckSQLInjectionPatterns(sanitized) {
+	if middleware.CheckXSSPatterns(input) || middleware.CheckSQLInjectionPatterns(input) {
 		return ""
 	}
+	sanitized := html.EscapeString(input)
+	sanitized = strings.TrimSpace(sanitized)
 	return sanitized
 }
 
 func (h *ContentHandler) SearchTracks(c *gin.Context) {
+	rawQuery, _ := url.QueryUnescape(c.Request.URL.RawQuery)
+	if middleware.CheckXSSPatterns(rawQuery) || middleware.CheckSQLInjectionPatterns(rawQuery) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in track search raw query", logger.Fields(
+			"ip", c.ClientIP(),
+			"raw_query", rawQuery,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
 	query := c.Query("q")
+
+	if middleware.CheckXSSPatterns(query) || middleware.CheckSQLInjectionPatterns(query) {
+		logger.Warn(logger.EventValidationFailure, "Malicious pattern detected in track search query", logger.Fields(
+			"ip", c.ClientIP(),
+			"query", query,
+		))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or potentially malicious input detected"})
+		return
+	}
+
 	query = sanitizeInput(query)
 
 	out, err := h.svc.SearchTracks(c.Request.Context(), query)
