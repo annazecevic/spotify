@@ -155,7 +155,7 @@ if middleware.CheckXSSPatterns(sanitized) || middleware.CheckSQLInjectionPattern
 We defend against the following high-level threats; controls are summarized in the table below.
 
 | Threat / Risk | Mitigation |
-|---------------|------------|
+|---------------|-----------|
 | A01:2021 – Broken Access Control | RBAC, mandatory auth on every protected request, role middleware on admin and sensitive endpoints |
 | A02:2021 – Cryptographic Failures | HTTPS only, TLS 1.2/1.3, strong ciphers, BCrypt for passwords, no plaintext credential storage |
 | A03:2021 – Injection | Input validation, whitelisting, SQL/XSS pattern checks, parameterized DB access, output encoding |
@@ -187,87 +187,87 @@ The Spotify Clone applies a defense-in-depth, security-first approach across aut
 
 ---
 
-## 7. Analiza ranjivosti
+## 7. Vulnerability Analysis
 
-Zahtev 2.21 traži izveštaj o nivou bezbednosti aplikacije:
+Requirement 2.21 asks for a report on the application security level:
 
-1. koji alati su korišćeni za identifikaciju ranjivosti  
-2. koje ranjivosti su identifikovane i kako se one mogu potencijalno eksploatisati  
-3. kako prevazići identifikovane ranjivosti  
-4. kako se zaštititi od eksploatacije istih  
+1. which tools were used to identify vulnerabilities  
+2. which vulnerabilities were identified and how they can potentially be exploited  
+3. how to remediate the identified vulnerabilities  
+4. how to protect against their exploitation  
 
-### 7.1 Alat korišćen za identifikaciju ranjivosti
+### 7.1 Tool Used to Identify Vulnerabilities
 
-- **SonarQube (Community Edition)** — statička analiza koda i kvaliteta, pokrenuta lokalno preko Docker-a.  
-  Analizira: ranjivosti (Security), bugove (Reliability), code smells (Maintainability), pokrivenost testovima (Coverage), duplikate (Duplications).  
-  Svaki Go mikroservis skeniran je kao zaseban projekat.
+- **SonarQube (Community Edition)** — static code and quality analysis, run locally via Docker.  
+  It analyzes: vulnerabilities (Security), bugs (Reliability), code smells (Maintainability), test coverage (Coverage), and duplications (Duplications).  
+  Each Go microservice was scanned as a separate project.
 
-Reprodukcija skenova (lokalno):
+How to reproduce scans (locally):
 
-- Pokretanje SonarQube-a: `docker-compose up -d sonarqube-db sonarqube` i otvaranje `http://localhost:9001`.
-- Kreiranje tokena: My Account → Security → Generate Token.
-- Analiza jednog servisa:  
-  `.\scripts\sonarqube-scan.ps1 -ServiceName <ime-servisa> -Token "<TOKEN>"`
-- Analiza svih servisa:  
+- Start SonarQube: `docker-compose up -d sonarqube-db sonarqube` and open `http://localhost:9001`.
+- Create a token: My Account → Security → Generate Token.
+- Analyze a single service:  
+  `.\scripts\sonarqube-scan.ps1 -ServiceName <service-name> -Token "<TOKEN>"`
+- Analyze all services:  
   `.\scripts\sonarqube-scan-all.ps1 -Token "<TOKEN>"`
 
 ---
 
-### 7.2 Rezultati po servisu (rezime)
+### 7.2 Results by Service (Summary)
 
-SonarQube je analizovao 5 Go mikroservisa: `content-service`, `user-service`, `notifications-service`, `storage-service`, `subscriptions-service`.
+SonarQube analyzed 5 Go microservices: `content-service`, `user-service`, `notifications-service`, `storage-service`, `subscriptions-service`.
 
-| Servis | Quality Gate | Security | Reliability | Maintainability issues (High) | Coverage | Duplications | Security Hotspots |
+| Service | Quality Gate | Security | Reliability | Maintainability issues (High) | Coverage | Duplications | Security Hotspots |
 |--------|--------------|----------|------------|-------------------------------|----------|--------------|------------------|
-| content-service | Failed (novi kod) | 0 (A) | 0 (A) | 4 | 0.0% | 4.25% (novi kod) | 0 |
-| user-service | Passed (sa upozorenjem) | 0 (A) | 0 (A) | 6 | 0.0% | 2.9% (handler: 17.1%) | 0 |
-| notifications-service | Passed (sa upozorenjem) | 0 (A) | 0 (A) | 1 | 0.0% | 0.0% | 0 |
-| storage-service | Passed (sa upozorenjem) | 0 (A) | 0 (A) | 7 | 0.0% | 0.0% | 0 |
-| subscriptions-service | Passed (sa upozorenjem) | 0 (A) | 0 (A) | 2 | 0.0% | 0.0% | 0 |
+| content-service | Failed (new code) | 0 (A) | 0 (A) | 4 | 0.0% | 4.25% (new code) | 0 |
+| user-service | Passed (with warning) | 0 (A) | 0 (A) | 6 | 0.0% | 2.9% (handler: 17.1%) | 0 |
+| notifications-service | Passed (with warning) | 0 (A) | 0 (A) | 1 | 0.0% | 0.0% | 0 |
+| storage-service | Passed (with warning) | 0 (A) | 0 (A) | 7 | 0.0% | 0.0% | 0 |
+| subscriptions-service | Passed (with warning) | 0 (A) | 0 (A) | 2 | 0.0% | 0.0% | 0 |
 
-Ključni zaključci iz tabele:
+Key conclusions from the table:
 
-- Nema detektovanih **Security vulnerabilities** ni **Reliability bugova** (svi servisi imaju ocenu A).
-- Identifikovano je ukupno **20 Maintainability issues (High)** — uglavnom duplirani literali i visoka složenost funkcija.
-- Code coverage je **0.0%** za sve servise, što znači da nema automatizovanih testova koji bi pokrivali kritične putanje.
-- Duplications su generalno niske, ali content-service i user-service imaju povišen procenat za novi kod, posebno u handler slojevima.
-
----
-
-### 7.3 Identifikovane ranjivosti i potencijalna eksploatacija
-
-SonarQube nije prijavio direktne ranjivosti tipa *Vulnerability*, ali je identifikovao probleme održivosti koji mogu indirektno dovesti do sigurnosnih propusta ako se zanemare.
-
-**1. Duplirani literali (17 issues)**
-
-- Pogađaju validacione i bezbednosne poruke (na primer `"invalid or potentially malicious input detected"`, `"user not authenticated"`, `"user not found"`), HTTP headere (`"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"`, `"X-User-ID"`) i error poruke (`"track not found: %s"`, `"failed to stat file: %w"`, `"failed to decode subscriptions: %w"`).
-- Potencijalna eksploatacija:
-  - nedosledna primena validacije i autentifikacije ako se poruka ili logika promeni na jednom mestu a ne na drugim;
-  - informaciono curenje kroz različite error poruke (otkrivanje da li resurs postoji, da li je problem u bazi, u dekodiranju, i slično);
-  - greške u konfiguraciji HTTP odgovora (na primer pogrešan `Content-Type`) koje mogu olakšati XSS ili druge napade.
-
-**2. Visoka Cognitive Complexity u user-service (4 issues)**
-
-- Složene funkcije u handler-ima, middleware-u i servisnom sloju otežavaju razumevanje i code review.
-- Potencijalna eksploatacija:
-  - logičke greške u autentifikaciji i autorizaciji koje prolaze neprimećene;
-  - edge-case scenariji (na primer specifične kombinacije header-a ili stanja korisnika) koji nisu pokriveni testovima i mogu zaobići sigurnosne provere.
-
-**3. Nizak coverage i duplikati koda**
-
-- Bez testova, regresije i bezbednosni problemi mogu ostati neprimećeni tokom refaktorisanja.
-- Duplirani kod povećava verovatnoću da se ista greška ili ranjivost pojavi na više mesta i otežava njeno ispravljanje.
+- No **Security vulnerabilities** or **Reliability bugs** were detected (all services have an A grade).
+- A total of **20 Maintainability issues (High)** were identified — mostly duplicated literals and high function complexity.
+- Code coverage is **0.0%** for all services, which means there are no automated tests that cover critical paths.
+- Duplications are generally low, but content-service and user-service have elevated duplication percentages for new code, especially in handler layers.
 
 ---
 
-### 7.4 Kako prevazići identifikovane ranjivosti
+### 7.3 Identified Weaknesses and Potential Exploitation
 
-Preporučene tehničke mere za otklanjanje uočenih problema:
+SonarQube did not report direct Vulnerability-type issues, but it identified maintainability problems that can indirectly lead to security flaws if ignored.
 
-**1. Konstante umesto dupliranih literala**
+**1. Duplicated literals (17 issues)**
 
-- Uvesti jasne konstante za sve ponavljane stringove (error poruke, security poruke, header nazive, MIME tipove).
-- Primer (generički):
+- Affect validation and security messages (for example `"invalid or potentially malicious input detected"`, `"user not authenticated"`, `"user not found"`), HTTP headers (`"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"`, `"X-User-ID"`) and error messages (`"track not found: %s"`, `"failed to stat file: %w"`, `"failed to decode subscriptions: %w"`).
+- Potential exploitation:
+  - Inconsistent application of validation and authentication if a message or logic is changed in one place but not in others;
+  - Information leakage through different error messages (revealing whether a resource exists, whether the problem is in the DB, decoding, and similar);
+  - HTTP response configuration errors (for example incorrect `Content-Type`) that can facilitate XSS or other attacks.
+
+**2. High Cognitive Complexity in user-service (4 issues)**
+
+- Complex functions in handlers, middleware and service layer make understanding and code review harder.
+- Potential exploitation:
+  - Logical errors in authentication and authorization that go unnoticed;
+  - Edge-case scenarios (for example specific combinations of headers or user states) that are not covered by tests and may bypass security checks.
+
+**3. Low coverage and code duplication**
+
+- Without tests, regressions and security issues can go unnoticed during refactoring.
+- Duplicated code increases the probability that the same bug or vulnerability appears in multiple places and makes it harder to fix.
+
+---
+
+### 7.4 How to Address the Identified Weaknesses
+
+Recommended technical measures to remediate the observed issues:
+
+**1. Constants instead of duplicated literals**
+
+- Introduce clear constants for all repeated strings (error messages, security messages, header names, MIME types).
+- Example (generic):
 
 ```go
 const (
@@ -277,61 +277,63 @@ const (
 )
 ```
 
-- Zameniti sve duplirane literale odgovarajućim konstantama u svim servisima i ponoviti SonarQube sken.
+- Replace all duplicated literals with the corresponding constants in all services and rerun the SonarQube scan.
 
-**2. Smanjenje kognitivne složenosti**
+**2. Reducing cognitive complexity**
 
-- Podeliti preduge funkcije na manje logičke celine (na primer validacija, obrada podataka, generisanje odgovora).
-- U auth middleware-u izvući parsiranje tokena, validaciju i proveru uloga u odvojene funkcije.
-- Refaktorisati složene funkcije u `user-service` tako da Complexity bude u granicama preporuke SonarQube pravila.
+- Split long functions into smaller logical units (for example validation, data processing, response generation).
+- In auth middleware, extract token parsing, validation and role checks into separate functions.
+- Refactor complex functions in `user-service` so that complexity stays within SonarQube’s recommended threshold.
 
-**3. Uvođenje automatizovanih testova i povećanje coverage-a**
+**3. Introducing automated tests and increasing coverage**
 
-- Dodati unit testove za:
-  - autentifikaciju i autorizaciju (user-service, subscriptions-service);
-  - validaciju i filtriranje inputa (content-service, notifications-service);
-  - upload/download i rad sa fajlovima (storage-service).
-- Dodati integration testove za ključne API endpoint-e i interakcije sa bazama podataka.
-- Postaviti cilj coverage-a (na primer 80%) i uključiti ga u SonarQube Quality Gate.
+- Add unit tests for:
+  - authentication and authorization (user-service, subscriptions-service);
+  - input validation and filtering (content-service, notifications-service);
+  - upload/download and file handling (storage-service).
+- Add integration tests for key API endpoints and DB interactions.
+- Set a coverage target (for example 80%) and include it in the SonarQube Quality Gate.
 
-**4. Smanjenje duplikata koda**
+**4. Reducing code duplication**
 
-- U `content-service` i `user-service` izvući ponovljene delove handler-a u pomoćne funkcije ili zajedničke module.
-- Redovno pratiti Duplications metriku po direktorijumima i refaktorisati kada vrednosti pređu dogovoreni prag.
+- In `content-service` and `user-service`, extract repeated handler logic into helper functions or shared modules.
+- Regularly monitor the Duplications metric per directory and refactor when values exceed the agreed threshold.
 
 ---
 
-### 7.5 Kako se zaštititi od eksploatacije (proces i prakse)
+### 7.5 How to Protect Against Exploitation (Process and Practices)
 
-Pored samog otklanjanja uočenih problema, važno je postaviti proces koji sprečava da se slične slabosti ponovo pojave.
+Besides fixing the current issues, it is important to set up a process that prevents similar weaknesses from reappearing.
 
-**1. Redovna statička analiza**
+**1. Regular static analysis**
 
-- Uvesti pravilo da se SonarQube sken pokreće za svaki veći commit ili pre spajanja grana.
-- Pratiti Quality Gate; ako padne zbog novih Security, Reliability ili High Maintainability issues, promene se ne smeju merge-ovati dok problemi ne budu rešeni.
+- Require that a SonarQube scan is run for every larger commit or before merging branches.
+- Monitor the Quality Gate; if it fails due to new Security, Reliability or High Maintainability issues, changes must not be merged until problems are fixed.
 
-**2. Code review usmeren na bezbednost**
+**2. Security-focused code review**
 
-- U code review checkliste uključiti:
-  - zabranu novih dupliranih literala za security poruke i headere;
-  - proveru da se složene funkcije razlažu na manje celine;
-  - proveru da novi kod ima odgovarajuće testove.
+- Include in review checklists:
+  - no new duplicated literals for security messages and headers;
+  - complex functions are broken down into smaller units;
+  - new code comes with appropriate tests.
 
-**3. Logging i monitoring**
+**3. Logging and monitoring**
 
-- Centralizovati logove iz svih servisa i proxy sloja.
-- Logovati:
-  - neuspele pokušaje autentifikacije i autorizacije,
-  - odbijene zahteve zbog malicioznog inputa,
-  - prekoračenja rate limita.
-- Postaviti upozorenja (alerting) za neuobičajene obrasce, na primer veliki broj neuspelih logovanja ili pokušaja sa malicioznim inputom.
+- Centralize logs from all services and the proxy layer.
+- Log:
+  - failed authentication and authorization attempts,
+  - rejected requests due to malicious input,
+  - rate limit violations.
+- Configure alerts for unusual patterns, such as a high number of failed logins or repeated malicious input.
 
-**4. Kontinuirano poboljšanje**
+**4. Continuous improvement**
 
-- Periodično (na primer kvartalno) analizirati SonarQube izveštaje i fokusirati se na smanjenje broja High severity issues.
-- Ažurirati politike i standarde koda na osnovu nalaza (na primer uvesti pravilo da su sve poruke i headeri definisani kroz konstante).
+- Periodically (for example quarterly) review SonarQube reports and focus on reducing the number of High severity issues.
+- Update coding policies and standards based on findings (for example introduce a rule that all messages and headers are defined via constants).
 
-Na ovaj način je zahtev 2.21 ispunjen: alat za analizu je jasno naveden, identifikovane su konkretne slabosti i njihov potencijalni uticaj, a definisane su i tehničke i procesne mere za njihovo otklanjanje i sprečavanje eksploatacije.
+In this way, requirement 2.21 is fulfilled: the analysis tool is clearly specified, concrete weaknesses and their potential impact are identified, and both technical and process measures are defined to remediate and prevent exploitation.
+
+---
 
 # Security Architecture
 
@@ -368,8 +370,8 @@ These pillars are implemented at the **edge (Nginx)**, in **application middlewa
 
 **Encryption in transit**
 
-- **HTTPS** is enforced for all client–server communication. Plain HTTP is redirected to HTTPS (e.g. `301` to `https://$host:8443$request_uri`).
-- TLS is restricted to **TLSv1.2** and **TLSv1.3**; strong cipher suites (e.g. ECDHE, AES-GCM, ChaCha20-Poly1305) are used.
+- **HTTPS** is enforced for all client–server communication. Plain HTTP is redirected to HTTPS (for example `301` to `https://$host:8443$request_uri`).
+- TLS is restricted to **TLSv1.2** and **TLSv1.3**; strong cipher suites (for example ECDHE, AES-GCM, ChaCha20-Poly1305) are used.
 - **HSTS** is enabled (`Strict-Transport-Security: max-age=31536000; includeSubDomains`) to prevent downgrade attacks.
 - SSL certificates and Diffie–Hellman parameters are generated for development; production should use CA-signed certificates.
 
@@ -389,11 +391,11 @@ if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 }
 ```
 
-- **Password policy**: Enforced server-side (e.g. minimum length, complexity, rejection of common passwords, consecutive character rules) to reduce weak credentials.
+- **Password policy**: Enforced server-side (for example minimum length, complexity, rejection of common passwords, consecutive character rules) to reduce weak credentials.
 - **Password lifecycle**: Optional password expiration and change timestamps support rotation and response to compromise.
 - **Password reset**: Time-limited, single-use tokens; reset links sent over email with clear user guidance.
 
-Sensitive configuration (e.g. JWT secret, DB and SMTP credentials) is externalized via environment variables and not committed to version control.
+Sensitive configuration (for example JWT secret, DB and SMTP credentials) is externalized via environment variables and not committed to version control.
 
 ---
 
@@ -401,14 +403,14 @@ Sensitive configuration (e.g. JWT secret, DB and SMTP credentials) is externaliz
 
 **Role-Based Access Control** ensures that every protected request is checked for both **identity** and **role**.
 
-- **Roles** (e.g. `user`, `admin`) are stored in the user store and embedded in the **JWT** (e.g. `role` claim). The JWT is validated at the API gateway and/or at each service.
+- **Roles** (for example `user`, `admin`) are stored in the user store and embedded in the **JWT** (for example `role` claim). The JWT is validated at the API gateway and/or at each service.
 - **Authorization** is mandatory for protected routes: no endpoint serves sensitive data or actions without a valid token and, where required, the appropriate role.
 
 **Enforcement points**
 
 1. **Nginx** — For protected API paths, an `auth_request` subrequest validates the JWT with the user service. Only on success are `X-User-ID` and `X-User-Role` set and the request proxied to backends.
 2. **Application middleware** — Each service uses an `AuthMiddleware` that parses the `Authorization: Bearer <token>` header, validates the JWT (signature and claims), and sets `user_id` and `user_role` in the request context.
-3. **Role checks** — Sensitive operations (e.g. create/update content, admin-only storage) are protected by `RoleMiddleware` or `AdminOnly()`, which deny access if the role does not match.
+3. **Role checks** — Sensitive operations (for example create/update content, admin-only storage) are protected by `RoleMiddleware` or `AdminOnly()`, which deny access if the role does not match.
 
 *Logic (conceptual):* After JWT validation, the role is read from claims and compared to the required role for the handler; a mismatch results in `403 Forbidden`.
 
@@ -439,13 +441,13 @@ This design preserves **system integrity** by ensuring that only authorized role
 
 **Proxy layer (Nginx)**
 
-- **Rate limiting** via `limit_req_zone`: different zones for login (e.g. 5 req/min), registration (e.g. 3 req/min), and general API (e.g. 50–100 req/s) to throttle abuse and credential stuffing.
-- **Connection limiting** (`limit_conn`) caps concurrent connections per client (e.g. 10) to prevent resource exhaustion.
+- **Rate limiting** via `limit_req_zone`: different zones for login (for example 5 req/min), registration (for example 3 req/min), and general API (for example 50–100 req/s) to throttle abuse and credential stuffing.
+- **Connection limiting** (`limit_conn`) caps concurrent connections per client (for example 10) to prevent resource exhaustion.
 - **Burst** and `nodelay` are used to allow short spikes while enforcing sustained limits.
 
 **Application layer (Go services)**
 
-- **In-memory rate limiters** (per client IP or per user ID when authenticated) limit requests per time window (e.g. 100/min general, 5/min for login/register/password-reset). Exceeding the limit returns `429 Too Many Requests`.
+- **In-memory rate limiters** (per client IP or per user ID when authenticated) limit requests per time window (for example 100/min general, 5/min for login/register/password-reset). Exceeding the limit returns `429 Too Many Requests`.
 
 *Logic (conceptual):* A sliding or fixed window counts requests per identifier; when the count exceeds the limit within the window, the request is rejected and a cleanup routine evicts expired entries.
 
@@ -468,11 +470,11 @@ We use **strict client-side and server-side validation** plus **output encoding*
 
 **Strategy**
 
-- **Whitelisting** — Input is validated against allowed character sets and lengths (e.g. username: alphanumeric, underscore, hyphen; name: letters, spaces, hyphens, apostrophes; email: RFC-style format). Reject invalid input early.
-- **Boundary checks** — Length and numeric range limits (e.g. username 3–30 chars, body size 10 MB) prevent buffer and resource abuse.
-- **Pattern-based detection** — Server-side checks for common **SQL injection** patterns (e.g. `UNION SELECT`, `'; --`, `OR 1=1`) and **XSS** patterns (e.g. `<script>`, `javascript:`, `onerror=`, `eval(`). Detected patterns result in rejection or sanitization.
+- **Whitelisting** — Input is validated against allowed character sets and lengths (for example username: alphanumeric, underscore, hyphen; name: letters, spaces, hyphens, apostrophes; email: RFC-style format). Invalid input is rejected early.
+- **Boundary checks** — Length and numeric range limits (for example username 3–30 characters, body size 10 MB) prevent buffer and resource abuse.
+- **Pattern-based detection** — Server-side checks for common **SQL injection** patterns (for example `UNION SELECT`, `'; --`, `OR 1=1`) and **XSS** patterns (for example `<script>`, `javascript:`, `onerror=`, `eval(`). Detected patterns result in rejection or sanitization.
 - **Sanitization / output encoding** — Before rendering or storing, strings are HTML-escaped (`html.EscapeString`) so that even if malicious input is missed, it is not executed as script or markup.
-- **Content-Type and size** — POST/PUT requests must use allowed content types (e.g. `application/json`, `multipart/form-data`); body size is capped.
+- **Content-Type and size** — POST/PUT requests must use allowed content types (for example `application/json`, `multipart/form-data`); body size is capped.
 
 **Security headers** (Nginx and/or application) reinforce browser behavior:
 
@@ -480,14 +482,14 @@ We use **strict client-side and server-side validation** plus **output encoding*
 - `X-Frame-Options: SAMEORIGIN` or `DENY`
 - `X-XSS-Protection: 1; mode=block`
 
-*Logic (conceptual):* Validation runs in middleware and in handlers; sanitization is applied before persistence or response. Content service applies XSS/SQL pattern checks on sanitized input before accepting content updates.
+*Logic (conceptual):* Validation runs in middleware and in handlers; sanitization is applied before persistence or response. The content service applies XSS/SQL pattern checks on sanitized input before accepting content updates.
 
 ```go
 // Sanitization: escape before storage/display
 sanitized := html.EscapeString(input)
 sanitized = strings.TrimSpace(sanitized)
 
-// Injection pattern check (e.g. in content handler)
+// Injection pattern check (for example in content handler)
 if middleware.CheckXSSPatterns(sanitized) || middleware.CheckSQLInjectionPatterns(sanitized) {
     // Reject or sanitize
 }
@@ -502,10 +504,10 @@ Note: We use MongoDB and parameterized access; the SQL injection checks add defe
 **Secure, distributed design**
 
 - **Microservices** — User, content, storage, and notifications run as separate services. A compromise in one component is contained by network and authentication boundaries.
-- **Reverse proxy** — Nginx is the single public entry point. It terminates TLS, enforces rate limits, and performs auth_request before forwarding; backends are not directly exposed.
-- **Isolated runtime** — Services run in **containers** (Docker); orchestration (e.g. Docker Compose) defines isolated networks so that only required service-to-service communication is possible.
+- **Reverse proxy** — Nginx is the single public entry point. It terminates TLS, enforces rate limits, and performs `auth_request` before forwarding; backends are not directly exposed.
+- **Isolated runtime** — Services run in **containers** (Docker); orchestration (for example Docker Compose) defines isolated networks so that only required service-to-service communication is possible.
 
-This structure supports **secure deployment** and future hardening (e.g. secrets management, network policies).
+This structure supports **secure deployment** and future hardening (for example secrets management, network policies).
 
 ---
 
@@ -534,792 +536,824 @@ The Spotify Clone applies a **defense-in-depth**, **security-first** approach ac
 
 ---
 
-## 6. Analiza ranjivosti (zahtev 2.21)
+## 6. Vulnerability Analysis (Requirement 2.21)
 
-Izveštaj o nivou bezbednosti aplikacije obuhvata:
+The application security report covers:
 
-1. **Koji alati su korišćeni** za identifikaciju ranjivosti  
-2. **Koje ranjivosti su identifikovane** i kako se one mogu potencijalno eksploatisati  
-3. **Kako prevazići** identifikovane ranjivosti  
-4. **Kako se zaštititi** od eksploatacije istih  
-
----
-
-### 6.1 Alati korišćeni za identifikaciju ranjivosti
-
-- **SonarQube (Community Edition)** — statička analiza koda i kvaliteta, pokreće se lokalno preko Docker-a.  
-  Analizira: ranjivosti (Security), bugove (Reliability), code smells (Maintainability), pokrivenost testovima (Coverage), duplikate (Duplications).  
-  Svaki Go mikroservis skenira se kao zaseban projekat u SonarQube-u.
-
-**Kako ponoviti skenove (reprodukcija):**  
-Pokretanje SonarQube-a: `docker-compose up -d sonarqube-db sonarqube`. Otvoriti http://localhost:9001, kreirati token (My Account → Security → Generate Token).  
-Jedan servis: `.\scripts\sonarqube-scan.ps1 -ServiceName <ime-servisa> -Token "TOKEN"`.  
-Svi servisi: `.\scripts\sonarqube-scan-all.ps1 -Token "TOKEN"`.  
-Projekti: http://localhost:9001/projects ; pojedinačni: http://localhost:9001/dashboard?id=spotify-*service-name*.
+1. **Which tools were used** to identify vulnerabilities  
+2. **Which vulnerabilities were identified** and how they can potentially be exploited  
+3. **How to remediate** the identified vulnerabilities  
+4. **How to protect** against their exploitation  
 
 ---
 
-### 6.2 Rezultati po servisu — šta da slikaš (korak po korak)
+### 6.1 Tools Used to Identify Vulnerabilities
 
-Za svaki servis redom uradimo isti set slika; zatim na osnovu slika sastavljamo tekst: identifikovane ranjivosti, kako se mogu eksploatisati, kako prevazići, kako se zaštititi.
+- **SonarQube (Community Edition)** — static code and quality analysis, run locally via Docker.  
+  It analyzes: vulnerabilities (Security), bugs (Reliability), code smells (Maintainability), test coverage (Coverage), duplications (Duplications).  
+  Each Go microservice is scanned as a separate project in SonarQube.
+
+**How to reproduce scans:**  
+Start SonarQube: `docker-compose up -d sonarqube-db sonarqube`. Open `http://localhost:9001`, create a token (My Account → Security → Generate Token).  
+Single service: `.\scripts\sonarqube-scan.ps1 -ServiceName <service-name> -Token "TOKEN"`.  
+All services: `.\scripts\sonarqube-scan-all.ps1 -Token "TOKEN"`.  
+Projects: `http://localhost:9001/projects`; single project: `http://localhost:9001/dashboard?id=spotify-*service-name*`.
 
 ---
 
-#### Servis 1: **content-service**
+### 6.2 Results by Service — What to Capture in Screenshots (Step by Step)
 
-**Dashboard:** http://localhost:9001/dashboard?id=spotify-content-service
+For each service we capture the same set of screenshots; based on them we construct the text: identified vulnerabilities, how they can be exploited, how to remediate, how to protect.
 
-**Slika 1 — Overview (pregled projekta)**
+---
+
+#### Service 1: **content-service**
+
+**Dashboard:** `http://localhost:9001/dashboard?id=spotify-content-service`
+
+**Screenshot 1 — Overview (project summary)**
 
 ![Content Service Overview](assets/content-service-overview.png)
 
-**Rezime:** Quality Gate **Failed** za "New Code". Pronađeno: **4 issues**, **0.0% Coverage** (ispod zahteva 80%), **4.25% Duplications** (iznad zahteva 3%). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 4 issues (A). Lines of Code: 1.7k.
+**Summary:** Quality Gate **Failed** for "New Code". Found: **4 issues**, **0.0% Coverage** (below the required 80%), **4.25% Duplications** (above the required 3%). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 4 issues (A). Lines of Code: 1.7k.
 
 ---
 
-**Slika 2 — Issues (identifikovane ranjivosti / problemi)**
+**Screenshot 2 — Issues (identified weaknesses/problems)**
 
 ![Content Service Issues](assets/content-service-issues.png)
 
-**Identifikovane ranjivosti / problemi:**
+**Identified weaknesses/problems:**
 
-1. **`handler/content_handler.go:142`** — Duplikovani literal `'artist id is required'` (3 puta). Maintainability, High.
-2. **`handler/content_handler.go:276`** — Duplikovani literal `'invalid or potentially malicious input detected'` (5 puta). Maintainability, High.
-3. **`repository/content_repository.go:148`** — Duplikovani literal `'$options'` (3 puta). Maintainability, High.
-4. **`repository/content_repository.go:148`** — Duplikovani literal `'$regex'` (3 puta). Maintainability, High.
+1. **`handler/content_handler.go:142`** — Duplicated literal `'artist id is required'` (3 times). Maintainability, High.
+2. **`handler/content_handler.go:276`** — Duplicated literal `'invalid or potentially malicious input detected'` (5 times). Maintainability, High.
+3. **`repository/content_repository.go:148`** — Duplicated literal `'$options'` (3 times). Maintainability, High.
+4. **`repository/content_repository.go:148`** — Duplicated literal `'$regex'` (3 times). Maintainability, High.
 
-**Kako se mogu potencijalno eksploatisati:**
+**How they can potentially be exploited:**
 
-- Duplikovani literali povećavaju rizik od grešaka pri izmenama: ako se poruka promeni na jednom mestu, ostala mesta mogu ostati zastarela, što može dovesti do konfuznih poruka ili nedoslednog ponašanja.
-- Posebno važno za `'invalid or potentially malicious input detected'`: ako se poruka promeni ili ukloni na jednom mestu, validacija može postati nedosledna, što može omogućiti propuštanje malicioznog inputa.
-- Veća verovatnoća tipografskih grešaka u dupliranim stringovima, što može dovesti do neočekivanog ponašanja ili propuštanja validacije.
+- Duplicated literals increase the risk of mistakes during changes: if a message is changed in one place but not the others, messages can become inconsistent and behavior confusing.
+- This is especially important for `'invalid or potentially malicious input detected'`: if the message or associated logic is changed or removed in one place, validation may become inconsistent and allow malicious input to pass.
+- Higher likelihood of typos in duplicated strings, which can lead to unexpected behavior or skipped validation.
 
-**Kako prevazići:**
+**How to remediate:**
 
-- Definisati konstante za sve duplikovane literale:
-  ```go
-  // U handler/content_handler.go
-  const (
-      ErrArtistIDRequired = "artist id is required"
-      ErrInvalidInput = "invalid or potentially malicious input detected"
-  )
-  
-  // U repository/content_repository.go
-  const (
-      MongoOptionKey = "$options"
-      MongoRegexKey = "$regex"
-  )
-  ```
-- Zameniti sve pojave dupliranih literala sa konstantama.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su issues rešeni.
+- Define constants for all duplicated literals:
 
-**Kako se zaštititi od eksploatacije:**
+```go
+// In handler/content_handler.go
+const (
+    ErrArtistIDRequired = "artist id is required"
+    ErrInvalidInput     = "invalid or potentially malicious input detected"
+)
 
-- Redovno pokretanje SonarQube skenova (npr. pre svakog merge-a) da se otkriju novi duplikati.
-- Praćenje Quality Gate-a: ako padne zbog duplikata, blokirati merge dok se ne isprave.
-- Code review: proveriti da li se koriste konstante umesto dupliranih literala, posebno za poruke validacije i bezbednosti.
-- Automatizacija: integrisati SonarQube u CI/CD pipeline da automatski proverava Quality Gate.
+// In repository/content_repository.go
+const (
+    MongoOptionKey = "$options"
+    MongoRegexKey  = "$regex"
+)
+```
+
+- Replace all occurrences of duplicated literals with constants.
+- After the change, rerun the SonarQube scan to confirm that the issues are resolved.
+
+**How to protect against exploitation:**
+
+- Run SonarQube scans regularly (for example before each merge) to detect new duplications.
+- Track the Quality Gate: if it fails due to duplications, block the merge until they are fixed.
+- During code review, check that constants are used instead of duplicated literals, especially for validation and security messages.
+- Automation: integrate SonarQube into the CI/CD pipeline so that the Quality Gate is checked automatically.
 
 ---
 
-**Slika 3 — Security Hotspots**
+**Screenshot 3 — Security Hotspots**
 
 ![Content Service Security Hotspots](assets/content-service-security-hotspots.png)
 
-**Rezime:** **0 Security Hotspots** — nema lokacija koje zahtevaju ručni pregled sa sigurnosnog aspekta.
+**Summary:** **0 Security Hotspots** — no locations requiring manual review from a security perspective.
 
 ---
 
-**Slika 4 — Duplications (duplikati)**
+**Screenshot 4 — Duplications**
 
 ![Content Service Duplications](assets/content-service-duplications.png)
 
-**Rezime:** U `handler` direktorijumu (`content_handler.go`): **13.3% duplikata** (559 linija koda). Duplikati su povezani sa issues iz Slike 2 (duplikovani literali).
+**Summary:** In the `handler` directory (`content_handler.go`): **13.3% duplication** (559 lines of code). Duplications are related to the issues from Screenshot 2 (duplicated literals).
 
-**Kako prevazići:** Refaktorisati kod da se uklone duplikati — izvući zajedničke delove u funkcije ili konstante (vidi preporuke iz Slike 2).
+**How to remediate:** Refactor code to remove duplications — extract common parts into functions or constants (see Screenshot 2 recommendations).
 
-**Kako se zaštititi:** Redovno praćenje metrike Duplications u SonarQube-u; Quality Gate zahteva ≤ 3% duplikata, trenutno je 4.25% za "New Code", što je razlog za Failed status.
-
----
-
-**Ukupan rezime za content-service:**
-
-- **Security:** 0 issues (A) — nema direktnih ranjivosti.
-- **Reliability:** 0 issues (A) — nema bugova.
-- **Maintainability:** 4 issues (High) — duplikovani literali u handler i repository slojevima.
-- **Coverage:** 0.0% — nema testova; Quality Gate zahteva ≥ 80%.
-- **Duplications:** 4.25% (New Code) — iznad zahteva 3%.
-
-**Glavni razlog za Quality Gate Failed:** Nizak coverage (0% vs zahtev 80%) i visok procenat duplikata (4.25% vs zahtev 3%).
+**How to protect:** Regularly monitor the Duplications metric in SonarQube; the Quality Gate requires ≤ 3% duplication, current value is 4.25% for "New Code", which is the reason for the Failed status.
 
 ---
 
-#### Servis 2: **user-service**
+**Overall summary for content-service:**
 
-**Dashboard:** http://localhost:9001/dashboard?id=spotify-user-service
+- **Security:** 0 issues (A) — no direct vulnerabilities.
+- **Reliability:** 0 issues (A) — no bugs.
+- **Maintainability:** 4 issues (High) — duplicated literals in handler and repository layers.
+- **Coverage:** 0.0% — no tests; Quality Gate requires ≥ 80%.
+- **Duplications:** 4.25% (New Code) — above the required 3%.
 
-**Slika 1 — Overview (pregled projekta)**
+**Main reason for Quality Gate Failed:** Low coverage (0% vs required 80%) and high duplication percentage (4.25% vs required 3%).
+
+---
+
+#### Service 2: **user-service**
+
+**Dashboard:** `http://localhost:9001/dashboard?id=spotify-user-service`
+
+**Screenshot 1 — Overview (project summary)**
 
 ![User Service Overview](assets/user-service-overview.png)
 
-**Rezime:** Quality Gate **Passed** (sa upozorenjem "The last analysis has warnings"). Pronađeno: **6 issues** (sve Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 6 issues (A). Coverage: 0.0% (777 linija bez pokrivenosti), Duplications: 2.9% (3k linija). Lines of Code: 2.4k.
+**Summary:** Quality Gate **Passed** (with warning "The last analysis has warnings"). Found: **6 issues** (all Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 6 issues (A). Coverage: 0.0% (777 lines uncovered), Duplications: 2.9% (3k lines). Lines of Code: 2.4k.
 
 ---
 
-**Slika 2 — Issues (identifikovane ranjivosti / problemi)**
+**Screenshot 2 — Issues (identified weaknesses/problems)**
 
 ![User Service Issues](assets/user-service-issues.png)
 
-**Identifikovane ranjivosti / problemi:**
+**Identified weaknesses/problems:**
 
-1. **`handler/user_handler.go:146`** — Duplikovani literal `'X-User-ID'` (4 puta). Maintainability, High.
-2. **`handler/user_handler.go:154`** — Cognitive Complexity 30 (dozvoljeno 15). Maintainability, High.
-3. **`middleware/auth_middleware.go:15`** — Cognitive Complexity 20 (dozvoljeno 15). Maintainability, High.
-4. **`service/user_service.go:298`** — Duplikovani literal `'user not found'` (3 puta). Maintainability, High.
-5. **`service/user_service.go:426`** — Cognitive Complexity 17 (dozvoljeno 15). Maintainability, High.
-6. **`utils/password_validator.go:8`** — Cognitive Complexity 16 (dozvoljeno 15). Maintainability, High.
+1. **`handler/user_handler.go:146`** — Duplicated literal `'X-User-ID'` (4 times). Maintainability, High.
+2. **`handler/user_handler.go:154`** — Cognitive Complexity 30 (allowed 15). Maintainability, High.
+3. **`middleware/auth_middleware.go:15`** — Cognitive Complexity 20 (allowed 15). Maintainability, High.
+4. **`service/user_service.go:298`** — Duplicated literal `'user not found'` (3 times). Maintainability, High.
+5. **`service/user_service.go:426`** — Cognitive Complexity 17 (allowed 15). Maintainability, High.
+6. **`utils/password_validator.go:8`** — Cognitive Complexity 16 (allowed 15). Maintainability, High.
 
-**Kako se mogu potencijalno eksploatisati:**
+**How they can potentially be exploited:**
 
-- **Duplikovani literali (`'X-User-ID'`, `'user not found'`):** Isti rizik kao u content-service — nedoslednost pri izmenama može dovesti do grešaka u autentifikaciji/autorizaciji. Posebno kritično za `'X-User-ID'` jer se koristi u middleware za proveru identiteta; ako se header promeni na jednom mestu a ne na drugom, može doći do propuštanja autorizacije.
-- **Visoka Cognitive Complexity (30, 20, 17, 16):** Složene funkcije su teže za razumevanje i održavanje, što povećava verovatnoću grešaka. U `user_handler.go:154` (Complexity 30) i `auth_middleware.go:15` (Complexity 20) — kritične tačke za autentifikaciju — visoka složenost može maskirati logičke greške koje napadač može iskoristiti (npr. propuštanje provere, pogrešna logika autorizacije).
-- **Nedoslednost u error porukama (`'user not found'`):** Ako se poruka promeni na jednom mestu, može doći do konfuzije pri debugovanju ili do informacijskog curenja (različite poruke mogu otkriti različite informacije o sistemu).
+- **Duplicated literals (`'X-User-ID'`, `'user not found'`):** Same risk as in content-service — inconsistency during changes can lead to authentication/authorization errors. Especially critical for `'X-User-ID'` because it is used in middleware for identity checks; if the header changes in one place but not in another, authorization can be bypassed.
+- **High Cognitive Complexity (30, 20, 17, 16):** Complex functions are harder to understand and maintain, increasing the probability of errors. In `user_handler.go:154` (Complexity 30) and `auth_middleware.go:15` (Complexity 20) — critical authentication locations — high complexity can hide logic errors that an attacker could exploit (for example missing checks, incorrect authorization logic).
+- **Inconsistent error messages (`'user not found'`):** If the message is changed in one place, it can lead to confusion during debugging or to information leakage (different messages may reveal whether a user exists).
 
-**Kako prevazići:**
+**How to remediate:**
 
-- **Duplikovani literali:**
-  ```go
-  // U handler/user_handler.go
-  const HeaderUserID = "X-User-ID"
-  
-  // U service/user_service.go
-  const ErrUserNotFound = "user not found"
-  ```
-  Zameniti sve pojave sa konstantama.
+- **Duplicated literals:**
+
+```go
+// In handler/user_handler.go
+const HeaderUserID = "X-User-ID"
+
+// In service/user_service.go
+const ErrUserNotFound = "user not found"
+```
+
+Replace all occurrences with constants.
 
 - **Cognitive Complexity:**
-  - **`user_handler.go:154` (Complexity 30):** Podeliti funkciju na manje funkcije (npr. izvući validaciju, obradu podataka, generisanje odgovora u zasebne funkcije).
-  - **`auth_middleware.go:15` (Complexity 20):** Pojednostaviti logiku autentifikacije — izvući parsiranje tokena, validaciju, postavljanje konteksta u zasebne funkcije.
-  - **`user_service.go:426` (Complexity 17) i `password_validator.go:8` (Complexity 16):** Refaktorisati u manje funkcije sa jasnom odgovornošću.
+  - **`user_handler.go:154` (Complexity 30):** Split the function into smaller functions (for example extract validation, data processing, and response generation).
+  - **`auth_middleware.go:15` (Complexity 20):** Simplify the authentication logic — extract token parsing, validation and context setting into separate functions.
+  - **`user_service.go:426` (Complexity 17) and `password_validator.go:8` (Complexity 16):** Refactor into smaller functions with clear responsibilities.
 
-**Kako se zaštititi od eksploatacije:**
+**How to protect against exploitation:**
 
-- Redovno pokretanje SonarQube skenova i praćenje Cognitive Complexity metrike — funkcije sa Complexity > 15 su rizične za kritične delove (auth, validacija).
-- Code review fokusiran na autentifikaciju/autorizaciju — posebno proveriti `auth_middleware.go` i `user_handler.go` zbog visoke složenosti.
-- Dodavanje unit testova za složene funkcije (posebno auth middleware) da se pokriju različiti scenariji i smanji rizik od logičkih grešaka.
-- Refaktorisanje pre merge-a — blokirati merge ako Cognitive Complexity prelazi prag (npr. 15) za kritične funkcije.
+- Run SonarQube scans regularly and monitor the Cognitive Complexity metric — functions with Complexity > 15 are risky in critical parts (auth, validation).
+- Focus code review on authentication/authorization — especially `auth_middleware.go` and `user_handler.go` due to high complexity.
+- Add unit tests for complex functions (especially auth middleware) to cover different scenarios and reduce the risk of logic errors.
+- Refactor before merging — block merges if Cognitive Complexity exceeds the (for example 15) threshold for critical functions.
 
 ---
 
-**Slika 3 — Security Hotspots**
+**Screenshot 3 — Security Hotspots**
 
 ![User Service Security Hotspots](assets/user-service-security-hotspots.png)
 
-**Rezime:** **0 Security Hotspots** — nema lokacija koje zahtevaju ručni pregled sa sigurnosnog aspekta.
+**Summary:** **0 Security Hotspots** — no locations requiring manual review from a security perspective.
 
 ---
 
-**Slika 4 — Duplications (duplikati)**
+**Screenshot 4 — Duplications**
 
 ![User Service Duplications](assets/user-service-duplications.png)
 
-**Rezime:** Ukupno **2.9% duplikata** (3k linija). **`handler` direktorijum ima 17.1% duplikata** (446 linija) — najveći procenat u servisu. Ostali direktorijumi imaju 0% duplikata.
+**Summary:** Total **2.9% duplication** (3k lines). The **`handler` directory has 17.1% duplication** (446 lines) — the highest percentage in the service. Other directories have 0% duplication.
 
-**Kako prevazići:** Refaktorisati `handler` direktorijum — izvući zajedničke delove u helper funkcije ili middleware. Duplikovani literali (vidi Issues) su deo problema.
+**How to remediate:** Refactor the `handler` directory — extract common parts into helper functions or middleware. Duplicated literals (see Issues) are part of the problem.
 
-**Kako se zaštititi:** Praćenje Duplications metrike po direktorijumu; `handler` direktorijum sa 17.1% je kritičan — refaktorisati pre nego što se poveća.
-
----
-
-**Ukupan rezime za user-service:**
-
-- **Security:** 0 issues (A) — nema direktnih ranjivosti.
-- **Reliability:** 0 issues (A) — nema bugova.
-- **Maintainability:** 6 issues (High) — 2 duplikovana literala, 4 funkcije sa visokom Cognitive Complexity.
-- **Coverage:** 0.0% — nema testova; Quality Gate zahteva ≥ 80%.
-- **Duplications:** 2.9% overall (Passed), ali `handler` direktorijum ima 17.1% (kritično).
-
-**Glavni razlog za Quality Gate Passed (sa upozorenjem):** Nizak coverage (0% vs zahtev 80%) i visoka Cognitive Complexity u kritičnim funkcijama (auth, handler) predstavljaju rizik za održivost i bezbednost.
+**How to protect:** Monitor the Duplications metric per directory; the `handler` directory at 17.1% is critical — refactor before it grows further.
 
 ---
 
-#### Servis 3: **notifications-service**
+**Overall summary for user-service:**
 
-**Dashboard:** http://localhost:9001/dashboard?id=spotify-notifications-service
+- **Security:** 0 issues (A) — no direct vulnerabilities.
+- **Reliability:** 0 issues (A) — no bugs.
+- **Maintainability:** 6 issues (High) — 2 duplicated literals, 4 functions with high Cognitive Complexity.
+- **Coverage:** 0.0% — no tests; Quality Gate requires ≥ 80%.
+- **Duplications:** 2.9% overall (Passed), but the `handler` directory has 17.1% (critical).
 
-**Slika 1 — Overview (pregled projekta)**
+**Main reason for Quality Gate Passed (with warning):** Low coverage (0% vs required 80%) and high Cognitive Complexity in critical functions (auth, handler) represent a risk for maintainability and security.
+
+---
+
+#### Service 3: **notifications-service**
+
+**Dashboard:** `http://localhost:9001/dashboard?id=spotify-notifications-service`
+
+**Screenshot 1 — Overview (project summary)**
 
 ![Notifications Service Overview](assets/notifications-service-overview.png)
 
-**Rezime:** Quality Gate **Passed** (sa upozorenjem "The last analysis has warnings"). Pronađeno: **1 issue** (Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 1 issue (A). Coverage: 0.0% (186 linija bez pokrivenosti), Duplications: 0.0%. Lines of Code: 694.
+**Summary:** Quality Gate **Passed** (with warning "The last analysis has warnings"). Found: **1 issue** (Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 1 issue (A). Coverage: 0.0% (186 lines uncovered), Duplications: 0.0%. Lines of Code: 694.
 
 ---
 
-**Slika 2 — Issues (identifikovane ranjivosti / problemi)**
+**Screenshot 2 — Issues (identified weaknesses/problems)**
 
 ![Notifications Service Issues](assets/notifications-service-issues.png)
 
-**Identifikovane ranjivosti / problemi:**
+**Identified weaknesses/problems:**
 
-1. **`handler/notification_handler.go:30`** — Duplikovani literal `"invalid or potentially malicious input detected"` (3 puta). Maintainability, High.
+1. **`handler/notification_handler.go:30`** — Duplicated literal `"invalid or potentially malicious input detected"` (3 times). Maintainability, High.
 
-**Kako se mogu potencijalno eksploatisati:**
+**How it can potentially be exploited:**
 
-- **Duplikovani security error literal (`"invalid or potentially malicious input detected"`):** Ova poruka je direktno vezana za detekciju malicioznog inputa. Ako se poruka ili logika vezana za nju promeni na jednom mestu a ne na drugom, može doći do nedoslednosti u validaciji inputa. Napadač može iskoristiti različite instance ove poruke da zaključi gde se validacija izvršava i da probije zaštitu na određenim endpoint-ima. Takođe, nedosledne poruke mogu maskirati različite tipove napada (npr. SQL injection vs XSS vs path traversal), što otežava incident response i može sakriti specifične sigurnosne probleme. Ako se jedna instanca ažurira sa boljom validacijom a druge ne, napadač može probiti zaštitu kroz neažurirane instance.
+- **Duplicated security error literal (`"invalid or potentially malicious input detected"`):** This message is directly tied to detection of malicious input. If the message or logic associated with it is changed in one place but not in others, input validation can become inconsistent. An attacker can use different instances of this message to infer where validation is applied and try to bypass protection on some endpoints. Also, inconsistent messages can hide different attack types (for example SQL injection vs XSS vs path traversal), making incident response harder and potentially concealing specific security problems. If one instance is updated with better validation and others are not, the attacker can bypass protection through the outdated instances.
 
-**Kako prevazići:**
+**How to remediate:**
 
-- **Definisati konstantu za security error poruku:**
-  ```go
-  // U handler/notification_handler.go ili u poseban security/constants.go
-  const ErrInvalidMaliciousInput = "invalid or potentially malicious input detected"
-  ```
-- Zameniti sve pojave dupliranih literala sa konstantom.
-- Razmotriti kreiranje centralizovanog security error handling modula koji koristi konstantu i obezbeđuje konzistentno logovanje i response za sve slučajeve malicioznog inputa.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su issues rešeni.
+- **Define a constant for the security error message:**
 
-**Kako se zaštititi od eksploatacije:**
+```go
+// In handler/notification_handler.go or in a dedicated security/constants.go
+const ErrInvalidMaliciousInput = "invalid or potentially malicious input detected"
+```
 
-- Redovno pokretanje SonarQube skenova da se otkriju novi duplikati, posebno u handler slojevima koji su kritični za validaciju inputa i sigurnost.
-- Code review fokusiran na input validaciju — proveriti da li se koriste konstante umesto dupliranih literala za security error poruke.
-- Centralizovani security error handling — kreirati modul koji upravlja svim security error porukama i logovanjem, umesto da se dupliraju literali.
-- Testiranje različitih scenarija malicioznog inputa (SQL injection, XSS, path traversal, itd.) da se potvrdi da su poruke konzistentne na svim endpoint-ima.
-- Praćenje Quality Gate-a — iako je Passed, upozorenje ukazuje na issues koje treba rešiti.
+- Replace all duplicated literals with the constant.
+- Consider creating a centralized security error handling module that uses the constant and provides consistent logging and responses for all malicious input cases.
+- After the change, rerun the SonarQube scan to confirm the issue is resolved.
+
+**How to protect against exploitation:**
+
+- Run SonarQube scans regularly to detect new duplications, especially in handler layers that are critical for input validation and security.
+- Focus code review on input validation — check that constants are used instead of duplicated literals for security error messages.
+- Centralize security error handling — create a module that manages all security error messages and logging instead of duplicating literals.
+- Test various malicious input scenarios (SQL injection, XSS, path traversal, etc.) to confirm that messages are consistent on all endpoints.
+- Monitor the Quality Gate — even though it is Passed, the warning points to issues that should be fixed.
 
 ---
 
-**Slika 3 — Security Hotspots**
+**Screenshot 3 — Security Hotspots**
 
 ![Notifications Service Security Hotspots](assets/notifications-service-security-hotspots.png)
 
-**Rezime:** **0 Security Hotspots** — nema lokacija koje zahtevaju ručni pregled sa sigurnosnog aspekta.
+**Summary:** **0 Security Hotspots** — no locations requiring manual review from a security perspective.
 
 ---
 
-**Slika 4 — Duplications (duplikati)**
+**Screenshot 4 — Duplications**
 
 ![Notifications Service Duplications](assets/notifications-service-duplications.png)
 
-**Rezime:** Ukupno **0.0% duplikata** (846 linija). Svi direktorijumi (`config`, `domain`, `handler`, `logger`, `middleware`, `repository`, `service`) i `main.go` imaju 0% duplikata. Duplikati su u obliku dupliranih literala (vidi Issues), ne blokova koda.
+**Summary:** Total **0.0% duplication** (846 lines). All directories (`config`, `domain`, `handler`, `logger`, `middleware`, `repository`, `service`) and `main.go` have 0% duplication. Duplications exist only as duplicated literals (see Issues), not code blocks.
 
-**Kako prevazići:** Definisati konstantu za duplikovani literal (vidi preporuke iz Slike 2).
+**How to remediate:** Define a constant for the duplicated literal (see Screenshot 2 recommendations).
 
-**Kako se zaštititi:** Iako je Duplications 0%, Issues pokazuju da postoji duplikovani literal koji treba refaktorisati u konstantu. Redovno praćenje Issues metrike, ne samo Duplications, posebno za security-relevantne poruke.
-
----
-
-**Ukupan rezime za notifications-service:**
-
-- **Security:** 0 issues (A) — nema direktnih ranjivosti.
-- **Reliability:** 0 issues (A) — nema bugova.
-- **Maintainability:** 1 issue (High) — duplikovani security error literal u handler sloju.
-- **Coverage:** 0.0% — nema testova; Quality Gate zahteva ≥ 80%.
-- **Duplications:** 0.0% (Passed) — nema dupliranih blokova koda, ali postoji duplikovani security-relevantni literal.
-
-**Glavni razlog za Quality Gate Passed (sa upozorenjem):** Nizak coverage (0% vs zahtev 80%) i 1 Maintainability issue (duplikovani security error literal) koje treba refaktorisati za bolju održivost i konzistentnost u validaciji malicioznog inputa.
+**How to protect:** Although Duplications is 0%, Issues show that there is a duplicated literal that should be refactored into a constant. Regularly monitor the Issues metric, not just Duplications, especially for security-relevant messages.
 
 ---
 
-#### Servis 4: **storage-service**
+**Overall summary for notifications-service:**
 
-**Dashboard:** http://localhost:9001/dashboard?id=spotify-storage-service
+- **Security:** 0 issues (A) — no direct vulnerabilities.
+- **Reliability:** 0 issues (A) — no bugs.
+- **Maintainability:** 1 issue (High) — duplicated security error literal in the handler layer.
+- **Coverage:** 0.0% — no tests; Quality Gate requires ≥ 80%.
+- **Duplications:** 0.0% (Passed) — no duplicated code blocks, but there is a duplicated security-relevant literal.
 
-**Slika 1 — Overview (pregled projekta)**
+**Main reason for Quality Gate Passed (with warning):** Low coverage (0% vs required 80%) and 1 Maintainability issue (duplicated security error literal) that should be refactored for better maintainability and consistency in malicious input validation.
+
+---
+
+#### Service 4: **storage-service**
+
+**Dashboard:** `http://localhost:9001/dashboard?id=spotify-storage-service`
+
+**Screenshot 1 — Overview (project summary)**
 
 ![Storage Service Overview](assets/storage-service-overview.png)
 
-**Rezime:** Quality Gate **Passed** (sa upozorenjem "The last analysis has warnings"). Pronađeno: **7 issues** (sve Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 7 issues (A). Coverage: 0.0% (329 linija bez pokrivenosti), Duplications: 0.0%. Lines of Code: 944.
+**Summary:** Quality Gate **Passed** (with warning "The last analysis has warnings"). Found: **7 issues** (all Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 7 issues (A). Coverage: 0.0% (329 lines uncovered), Duplications: 0.0%. Lines of Code: 944.
 
 ---
 
-**Slika 2 — Issues (identifikovane ranjivosti / problemi)**
+**Screenshot 2 — Issues (identified weaknesses/problems)**
 
 ![Storage Service Issues](assets/storage-service-issues.png)
 
-**Identifikovane ranjivosti / problemi:**
+**Identified weaknesses/problems:**
 
-**U `handler/storage_handler.go`:**
-1. **Linija 32** — Duplikovani literal `'track_id is required'` (4 puta). Maintainability, High.
-2. **Linija 48** — Duplikovani literal `'Content-Type'` (4 puta). Maintainability, High.
-3. **Linija 113** — Duplikovani literal `'Content-Length'` (3 puta). Maintainability, High.
-4. **Linija 114** — Duplikovani literal `'Accept-Ranges'` (3 puta). Maintainability, High.
+**In `handler/storage_handler.go`:**
 
-**U `hdfs/client.go`:**
-5. **Linija 98** — Duplikovani literal `'track not found: %s'` (4 puta). Maintainability, High.
-6. **Linija 100** — Duplikovani literal `'failed to stat file: %w'` (3 puta). Maintainability, High.
-7. **Linija 113** — Duplikovani literal `'audio/mpeg'` (4 puta). Maintainability, High.
+1. **Line 32** — Duplicated literal `'track_id is required'` (4 times). Maintainability, High.
+2. **Line 48** — Duplicated literal `'Content-Type'` (4 times). Maintainability, High.
+3. **Line 113** — Duplicated literal `'Content-Length'` (3 times). Maintainability, High.
+4. **Line 114** — Duplicated literal `'Accept-Ranges'` (3 times). Maintainability, High.
 
-**Kako se mogu potencijalno eksploatisati:**
+**In `hdfs/client.go`:**
 
-- **Duplikovani HTTP header literali (`'Content-Type'`, `'Content-Length'`, `'Accept-Ranges'`):** Ako se header promeni na jednom mestu a ne na drugom, može doći do nedoslednosti u HTTP odgovorima. Napadač može iskoristiti nedoslednost da probije cache ili da izazove neočekivano ponašanje u klijentu (npr. pogrešan Content-Type može dovesti do XSS ako se fajl renderuje kao HTML umesto kao download).
-- **Duplikovani error poruke (`'track not found: %s'`, `'failed to stat file: %w'`):** Nedosledne error poruke mogu otkriti informacije o sistemu (npr. različite poruke za različite scenarije mogu otkriti da li fajl postoji, da li je problem sa HDFS-om, itd.). To može pomoći napadaču u reconnaissance fazi.
-- **Duplikovani MIME type (`'audio/mpeg'`):** Ako se MIME type promeni na jednom mestu, može doći do nedoslednosti — fajl može biti poslužen sa pogrešnim Content-Type, što može dovesti do problema sa bezbednošću (npr. ako se audio fajl posluži kao `text/html`, browser može pokušati da ga renderuje).
-- **Duplikovani validation literal (`'track_id is required'`):** Ako se poruka promeni na jednom mestu, validacija može postati nedosledna, što može omogućiti propuštanje validacije na nekim endpoint-ima.
+5. **Line 98** — Duplicated literal `'track not found: %s'` (4 times). Maintainability, High.
+6. **Line 100** — Duplicated literal `'failed to stat file: %w'` (3 times). Maintainability, High.
+7. **Line 113** — Duplicated literal `'audio/mpeg'` (4 times). Maintainability, High.
 
-**Kako prevazići:**
+**How they can potentially be exploited:**
 
-- **Definisati konstante za HTTP headere:**
-  ```go
-  // U handler/storage_handler.go
-  const (
-      HeaderContentType = "Content-Type"
-      HeaderContentLength = "Content-Length"
-      HeaderAcceptRanges = "Accept-Ranges"
-  )
-  ```
+- **Duplicated HTTP header literals (`'Content-Type'`, `'Content-Length'`, `'Accept-Ranges'`):** If the header is changed in one place but not another, HTTP responses may become inconsistent. An attacker could exploit inconsistencies to bypass caches or cause unexpected client behavior (for example, a wrong `Content-Type` can facilitate XSS if a file is rendered as HTML instead of being downloaded).
+- **Duplicated error messages (`'track not found: %s'`, `'failed to stat file: %w'`):** Inconsistent error messages may reveal information about the system (for example, different messages for different scenarios can reveal whether a file exists, whether the problem is with HDFS, etc.). This can help an attacker in the reconnaissance phase.
+- **Duplicated MIME type (`'audio/mpeg'`):** If the MIME type is changed in one place but not another, a file may be served with the wrong `Content-Type`, potentially causing security issues (for example, if an audio file is served as `text/html`, the browser might try to render it).
+- **Duplicated validation literal (`'track_id is required'`):** If the message is changed in one place, validation can become inconsistent and allow some endpoints to skip checks.
 
-- **Definisati konstante za error poruke:**
-  ```go
-  // U hdfs/client.go
-  const (
-      ErrTrackNotFound = "track not found: %s"
-      ErrFailedToStatFile = "failed to stat file: %w"
-  )
-  ```
+**How to remediate:**
 
-- **Definisati konstante za MIME type:**
-  ```go
-  // U hdfs/client.go ili u poseban constants.go
-  const MIMETypeAudioMPEG = "audio/mpeg"
-  ```
+- **Define constants for HTTP headers:**
 
-- **Definisati konstante za validation poruke:**
-  ```go
-  // U handler/storage_handler.go
-  const ErrTrackIDRequired = "track_id is required"
-  ```
+```go
+// In handler/storage_handler.go
+const (
+    HeaderContentType   = "Content-Type"
+    HeaderContentLength = "Content-Length"
+    HeaderAcceptRanges  = "Accept-Ranges"
+)
+```
 
-- Zameniti sve pojave dupliranih literala sa konstantama.
+- **Define constants for error messages:**
 
-**Kako se zaštititi od eksploatacije:**
+```go
+// In hdfs/client.go
+const (
+    ErrTrackNotFound    = "track not found: %s"
+    ErrFailedToStatFile = "failed to stat file: %w"
+)
+```
 
-- Redovno pokretanje SonarQube skenova da se otkriju novi duplikati, posebno u handler i hdfs slojevima koji su kritični za bezbednost fajlova.
-- Code review fokusiran na HTTP headere i MIME type-ove — proveriti da li se koriste konstante umesto dupliranih literala.
-- Testiranje različitih scenarija (npr. različiti MIME type-ovi, različiti error scenariji) da se potvrdi da su poruke konzistentne.
-- Praćenje Quality Gate-a — iako je Passed, upozorenje ukazuje na issues koje treba rešiti.
+- **Define constants for MIME types:**
+
+```go
+// In hdfs/client.go or in a separate constants.go
+const MIMETypeAudioMPEG = "audio/mpeg"
+```
+
+- **Define constants for validation messages:**
+
+```go
+// In handler/storage_handler.go
+const ErrTrackIDRequired = "track_id is required"
+```
+
+- Replace all occurrences of duplicated literals with constants.
+
+**How to protect against exploitation:**
+
+- Run SonarQube scans regularly to detect new duplications, especially in handler and hdfs layers that are critical for file security.
+- Focus code review on HTTP headers and MIME types — check that constants are used instead of duplicated literals.
+- Test various scenarios (for example different MIME types, different error scenarios) to confirm that messages and headers are consistent.
+- Monitor the Quality Gate — even though it is Passed, the warning points to issues that should be fixed.
 
 ---
 
-**Slika 3 — Security Hotspots**
+**Screenshot 3 — Security Hotspots**
 
 ![Storage Service Security Hotspots](assets/storage-service-security-hotspots.png)
 
-**Rezime:** **0 Security Hotspots** — nema lokacija koje zahtevaju ručni pregled sa sigurnosnog aspekta.
+**Summary:** **0 Security Hotspots** — no locations requiring manual review from a security perspective.
 
 ---
 
-**Slika 4 — Duplications (duplikati)**
+**Screenshot 4 — Duplications**
 
 ![Storage Service Duplications](assets/storage-service-duplications.png)
 
-**Rezime:** Ukupno **0.0% duplikata** (1.1k linija). Svi direktorijumi (`config`, `handler`, `hdfs`, `logger`, `middleware`) i `main.go` imaju 0% duplikata. Duplikati su u obliku dupliranih literala (vidi Issues), ne blokova koda.
+**Summary:** Total **0.0% duplication** (1.1k lines). All directories (`config`, `handler`, `hdfs`, `logger`, `middleware`) and `main.go` have 0% duplication. Duplications exist only as duplicated literals (see Issues), not code blocks.
 
-**Kako prevazići:** Definisati konstante za duplikovane literale (vidi preporuke iz Slike 2).
+**How to remediate:** Define constants for duplicated literals (see Screenshot 2 recommendations).
 
-**Kako se zaštititi:** Iako je Duplications 0%, Issues pokazuju da postoje duplikovani literali koji treba refaktorisati u konstante. Redovno praćenje Issues metrike, ne samo Duplications.
-
----
-
-**Ukupan rezime za storage-service:**
-
-- **Security:** 0 issues (A) — nema direktnih ranjivosti.
-- **Reliability:** 0 issues (A) — nema bugova.
-- **Maintainability:** 7 issues (High) — svi su duplikovani literali u handler i hdfs slojevima.
-- **Coverage:** 0.0% — nema testova; Quality Gate zahteva ≥ 80%.
-- **Duplications:** 0.0% (Passed) — nema dupliranih blokova koda, ali postoje duplikovani literali.
-
-**Glavni razlog za Quality Gate Passed (sa upozorenjem):** Nizak coverage (0% vs zahtev 80%) i 7 Maintainability issues (duplikovani literali) koje treba refaktorisati za bolju održivost i konzistentnost.
+**How to protect:** Although Duplications is 0%, Issues show that there are duplicated literals that should be refactored into constants. Regularly monitor the Issues metric, not just Duplications.
 
 ---
 
-#### Servis 5: **subscriptions-service**
+**Overall summary for storage-service:**
 
-**Dashboard:** http://localhost:9001/dashboard?id=spotify-subscriptions-service
+- **Security:** 0 issues (A) — no direct vulnerabilities.
+- **Reliability:** 0 issues (A) — no bugs.
+- **Maintainability:** 7 issues (High) — all are duplicated literals in handler and hdfs layers.
+- **Coverage:** 0.0% — no tests; Quality Gate requires ≥ 80%.
+- **Duplications:** 0.0% (Passed) — no duplicated code blocks, but there are duplicated literals.
 
-**Slika 1 — Overview (pregled projekta)**
+**Main reason for Quality Gate Passed (with warning):** Low coverage (0% vs required 80%) and 7 Maintainability issues (duplicated literals) that should be refactored for better maintainability and consistency.
+
+---
+
+#### Service 5: **subscriptions-service**
+
+**Dashboard:** `http://localhost:9001/dashboard?id=spotify-subscriptions-service`
+
+**Screenshot 1 — Overview (project summary)**
 
 ![Subscriptions Service Overview](assets/subscriptions-service-overview.png)
 
-**Rezime:** Quality Gate **Passed** (sa upozorenjem "The last analysis has warnings"). Pronađeno: **2 issues** (sve Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 2 issues (A). Coverage: 0.0% (300 linija bez pokrivenosti), Duplications: 0.0%. Lines of Code: 964.
+**Summary:** Quality Gate **Passed** (with warning "The last analysis has warnings"). Found: **2 issues** (all Maintainability). Security: 0 issues (A), Reliability: 0 issues (A), Maintainability: 2 issues (A). Coverage: 0.0% (300 lines uncovered), Duplications: 0.0%. Lines of Code: 964.
 
 ---
 
-**Slika 2 — Issues (identifikovane ranjivosti / problemi)**
+**Screenshot 2 — Issues (identified weaknesses/problems)**
 
 ![Subscriptions Service Issues](assets/subscriptions-service-issues.png)
 
-**Identifikovane ranjivosti / problemi:**
+**Identified weaknesses/problems:**
 
-1. **`handler/subscription_handler.go:27`** — Duplikovani literal `'user not authenticated'` (4 puta). Maintainability, High.
-2. **`repository/subscription_repository.go:94`** — Duplikovani literal `'failed to decode subscriptions: %w'` (3 puta). Maintainability, High.
+1. **`handler/subscription_handler.go:27`** — Duplicated literal `'user not authenticated'` (4 times). Maintainability, High.
+2. **`repository/subscription_repository.go:94`** — Duplicated literal `'failed to decode subscriptions: %w'` (3 times). Maintainability, High.
 
-**Kako se mogu potencijalno eksploatisati:**
+**How they can potentially be exploited:**
 
-- **Duplikovani authentication error literal (`'user not authenticated'`):** Ako se poruka promeni na jednom mestu a ne na drugom, može doći do nedoslednosti u autentifikaciji. Napadač može iskoristiti različite poruke da zaključi gde se provera izvršava i da probije autentifikaciju na određenim endpoint-ima. Takođe, nedosledne poruke mogu maskirati različite tipove grešaka (npr. invalid token vs expired token), što otežava debugovanje i može sakriti sigurnosne probleme.
-- **Duplikovani error poruka za dekodiranje (`'failed to decode subscriptions: %w'`):** Nedosledne error poruke mogu otkriti informacije o strukturi podataka ili o tome gde se dešava greška u procesu dekodiranja. To može pomoći napadaču u reconnaissance fazi ili u crafting malicioznih payload-a koji eksploatišu specifične greške u parsiranju.
+- **Duplicated authentication error literal (`'user not authenticated'`):** If the message is changed in one place but not another, authentication behavior may become inconsistent. An attacker can use different messages to infer where checks are performed and attempt to bypass authentication on certain endpoints. Also, inconsistent messages can hide different error types (for example invalid token vs expired token), making debugging harder and potentially hiding security issues.
+- **Duplicated decode error message (`'failed to decode subscriptions: %w'`):** Inconsistent error messages may reveal information about data structure or where in the decode process an error occurs. This can help an attacker in reconnaissance or in crafting malicious payloads that exploit specific parsing errors.
 
-**Kako prevazići:**
+**How to remediate:**
 
-- **Definisati konstante za error poruke:**
-  ```go
-  // U handler/subscription_handler.go
-  const ErrUserNotAuthenticated = "user not authenticated"
-  
-  // U repository/subscription_repository.go
-  const ErrFailedToDecodeSubscriptions = "failed to decode subscriptions: %w"
-  ```
-- Zameniti sve pojave dupliranih literala sa konstantama.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su issues rešeni.
+- **Define constants for error messages:**
 
-**Kako se zaštititi od eksploatacije:**
+```go
+// In handler/subscription_handler.go
+const ErrUserNotAuthenticated = "user not authenticated"
 
-- Redovno pokretanje SonarQube skenova da se otkriju novi duplikati, posebno u handler i repository slojevima koji su kritični za autentifikaciju i obradu podataka.
-- Code review fokusiran na autentifikaciju — proveriti da li se koriste konstante umesto dupliranih literala za error poruke.
-- Testiranje različitih scenarija autentifikacije da se potvrdi da su poruke konzistentne na svim endpoint-ima.
-- Praćenje Quality Gate-a — iako je Passed, upozorenje ukazuje na issues koje treba rešiti.
+// In repository/subscription_repository.go
+const ErrFailedToDecodeSubscriptions = "failed to decode subscriptions: %w"
+```
+
+- Replace all occurrences of duplicated literals with constants.
+- After the change, rerun the SonarQube scan to confirm the issues are resolved.
+
+**How to protect against exploitation:**
+
+- Run SonarQube scans regularly to detect new duplications, especially in handler and repository layers that are critical for authentication and data processing.
+- Focus code review on authentication — check that constants are used instead of duplicated literals for error messages.
+- Test different authentication scenarios to confirm that messages are consistent on all endpoints.
+- Monitor the Quality Gate — even though it is Passed, the warning points to issues that should be fixed.
 
 ---
 
-**Slika 3 — Security Hotspots**
+**Screenshot 3 — Security Hotspots**
 
 ![Subscriptions Service Security Hotspots](assets/subscriptions-service-security-hotspots.png)
 
-**Rezime:** **0 Security Hotspots** — nema lokacija koje zahtevaju ručni pregled sa sigurnosnog aspekta.
+**Summary:** **0 Security Hotspots** — no locations requiring manual review from a security perspective.
 
 ---
 
-**Slika 4 — Duplications (duplikati)**
+**Screenshot 4 — Duplications**
 
 ![Subscriptions Service Duplications](assets/subscriptions-service-duplications.png)
 
-**Rezime:** Ukupno **0.0% duplikata** (1.1k linija). Svi direktorijumi (`config`, `domain`, `dto`, `handler`, `logger`, `middleware`, `repository`, `service`) i `main.go` imaju 0% duplikata. Duplikati su u obliku dupliranih literala (vidi Issues), ne blokova koda.
+**Summary:** Total **0.0% duplication** (1.1k lines). All directories (`config`, `domain`, `dto`, `handler`, `logger`, `middleware`, `repository`, `service`) and `main.go` have 0% duplication. Duplications exist only as duplicated literals (see Issues), not code blocks.
 
-**Kako prevazići:** Definisati konstante za duplikovane literale (vidi preporuke iz Slike 2).
+**How to remediate:** Define constants for duplicated literals (see Screenshot 2 recommendations).
 
-**Kako se zaštititi:** Iako je Duplications 0%, Issues pokazuju da postoje duplikovani literali koji treba refaktorisati u konstante. Redovno praćenje Issues metrike, ne samo Duplications.
-
----
-
-**Ukupan rezime za subscriptions-service:**
-
-- **Security:** 0 issues (A) — nema direktnih ranjivosti.
-- **Reliability:** 0 issues (A) — nema bugova.
-- **Maintainability:** 2 issues (High) — duplikovani literali u handler i repository slojevima.
-- **Coverage:** 0.0% — nema testova; Quality Gate zahteva ≥ 80%.
-- **Duplications:** 0.0% (Passed) — nema dupliranih blokova koda, ali postoje duplikovani literali.
-
-**Glavni razlog za Quality Gate Passed (sa upozorenjem):** Nizak coverage (0% vs zahtev 80%) i 2 Maintainability issues (duplikovani literali) koje treba refaktorisati za bolju održivost i konzistentnost, posebno u autentifikaciji.
+**How to protect:** Although Duplications is 0%, Issues show that there are duplicated literals that should be refactored into constants. Regularly monitor the Issues metric, not just Duplications.
 
 ---
 
-### 6.3 Identifikovane ranjivosti i kako se mogu eksploatisati
+**Overall summary for subscriptions-service:**
 
-Na osnovu SonarQube analize svih 5 Go mikroservisa, identifikovano je **ukupno 20 Maintainability issues** (svi High severity). **Nema direktnih Security vulnerabilities ili Reliability bugova** (svi servisi imaju A rating za Security i Reliability). Međutim, Maintainability issues mogu indirektno uticati na bezbednost i mogu se potencijalno eksploatisati.
+- **Security:** 0 issues (A) — no direct vulnerabilities.
+- **Reliability:** 0 issues (A) — no bugs.
+- **Maintainability:** 2 issues (High) — duplicated literals in handler and repository layers.
+- **Coverage:** 0.0% — no tests; Quality Gate requires ≥ 80%.
+- **Duplications:** 0.0% (Passed) — no duplicated code blocks, but there are duplicated literals.
 
-#### Ukupan pregled nalaza po servisima:
+**Main reason for Quality Gate Passed (with warning):** Low coverage (0% vs required 80%) and 2 Maintainability issues (duplicated literals) that should be refactored for better maintainability and consistency, especially in authentication.
 
-| Servis | Security Issues | Reliability Issues | Maintainability Issues | Coverage | Duplications | Security Hotspots |
-|--------|----------------|-------------------|----------------------|----------|--------------|------------------|
+---
+
+### 6.3 Identified Weaknesses and How They Can Be Exploited
+
+Based on the SonarQube analysis of all 5 Go microservices, a total of **20 Maintainability issues** (all High severity) were identified. **There are no direct Security vulnerabilities or Reliability bugs** (all services have an A rating for Security and Reliability). However, Maintainability issues can indirectly affect security and can potentially be exploited.
+
+#### Overall summary of findings per service:
+
+| Service | Security Issues | Reliability Issues | Maintainability Issues | Coverage | Duplications | Security Hotspots |
+|--------|----------------|-------------------|------------------------|----------|--------------|------------------|
 | **content-service** | 0 (A) | 0 (A) | 4 (High) | 0.0% | 4.25% | 0 |
 | **user-service** | 0 (A) | 0 (A) | 6 (High) | 0.0% | 2.9% (handler: 17.1%) | 0 |
 | **notifications-service** | 0 (A) | 0 (A) | 1 (High) | 0.0% | 0.0% | 0 |
 | **storage-service** | 0 (A) | 0 (A) | 7 (High) | 0.0% | 0.0% | 0 |
 | **subscriptions-service** | 0 (A) | 0 (A) | 2 (High) | 0.0% | 0.0% | 0 |
-| **UKUPNO** | **0** | **0** | **20** | **0.0%** | **0.0% - 4.25%** | **0** |
+| **TOTAL** | **0** | **0** | **20** | **0.0%** | **0.0% - 4.25%** | **0** |
 
-#### Kategorije identifikovanih problema:
+#### Categories of identified problems:
 
-**1. Duplikovani literali (17 issues):**
+**1. Duplicated literals (17 issues):**
 
-- **Security-relevantni literali:**
-  - `"invalid or potentially malicious input detected"` — content-service (5 puta), notifications-service (3 puta)
-  - `"user not authenticated"` — subscriptions-service (4 puta)
-  - `"user not found"` — user-service (3 puta)
+- **Security-relevant literals:**
+  - `"invalid or potentially malicious input detected"` — content-service (5 times), notifications-service (3 times)
+  - `"user not authenticated"` — subscriptions-service (4 times)
+  - `"user not found"` — user-service (3 times)
   
-- **HTTP headeri i MIME type-ovi:**
-  - `"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"` — storage-service (3-4 puta svaki)
-  - `"audio/mpeg"` — storage-service (4 puta)
-  - `"X-User-ID"` — user-service (4 puta)
+- **HTTP headers and MIME types:**
+  - `"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"` — storage-service (3–4 times each)
+  - `"audio/mpeg"` — storage-service (4 times)
+  - `"X-User-ID"` — user-service (4 times)
   
-- **Validation i error poruke:**
-  - `"artist id is required"` — content-service (3 puta)
-  - `"track_id is required"` — storage-service (4 puta)
-  - `"failed to decode subscriptions: %w"` — subscriptions-service (3 puta)
-  - `"track not found: %s"`, `"failed to stat file: %w"` — storage-service (3-4 puta)
+- **Validation and error messages:**
+  - `"artist id is required"` — content-service (3 times)
+  - `"track_id is required"` — storage-service (4 times)
+  - `"failed to decode subscriptions: %w"` — subscriptions-service (3 times)
+  - `"track not found: %s"`, `"failed to stat file: %w"` — storage-service (3–4 times)
   
-- **MongoDB query literali:**
-  - `"$options"`, `"$regex"` — content-service (3 puta svaki)
+- **MongoDB query literals:**
+  - `"$options"`, `"$regex"` — content-service (3 times each)
 
-**2. Visoka Cognitive Complexity (4 issues u user-service):**
+**2. High Cognitive Complexity (4 issues in user-service):**
 
-- `handler/user_handler.go:154` — Complexity 30 (dozvoljeno 15)
-- `middleware/auth_middleware.go:15` — Complexity 20 (dozvoljeno 15)
-- `service/user_service.go:426` — Complexity 17 (dozvoljeno 15)
-- `utils/password_validator.go:8` — Complexity 16 (dozvoljeno 15)
+- `handler/user_handler.go:154` — Complexity 30 (allowed 15)
+- `middleware/auth_middleware.go:15` — Complexity 20 (allowed 15)
+- `service/user_service.go:426` — Complexity 17 (allowed 15)
+- `utils/password_validator.go:8` — Complexity 16 (allowed 15)
 
-#### Kako se mogu potencijalno eksploatisati:
+#### How they can potentially be exploited:
 
-**1. Duplikovani security-relevantni literali:**
+**1. Duplicated security-relevant literals:**
 
-- **Nedoslednost u validaciji malicioznog inputa:** Ako se poruka `"invalid or potentially malicious input detected"` ili logika vezana za nju promeni na jednom mestu a ne na drugom, napadač može iskoristiti različite instance da zaključi gde se validacija izvršava i da probije zaštitu na određenim endpoint-ima. Ako se jedna instanca ažurira sa boljom validacijom a druge ne, napadač može probiti zaštitu kroz neažurirane instance.
+- **Inconsistent malicious input validation:** If the message `"invalid or potentially malicious input detected"` or its associated logic is changed in one place but not another, an attacker can infer where validation is applied and bypass protection on certain endpoints. If one instance is updated with better validation and others are not, the attacker can exploit the less protected paths.
   
-- **Nedoslednost u autentifikaciji/autorizaciji:** Duplikovani literali kao `"user not authenticated"` i `"X-User-ID"` u kritičnim handler i middleware slojevima mogu dovesti do propuštanja autorizacije ako se header ili poruka promene na jednom mestu a ne na drugom. Napadač može probiti autentifikaciju na određenim endpoint-ima ako validacija nije konzistentna.
+- **Inconsistent authentication/authorization:** Duplicated literals such as `"user not authenticated"` and `"X-User-ID"` in critical handler and middleware layers may lead to authorization bypass if a header or message is changed in one place but not others. An attacker can exploit inconsistent validation on certain endpoints.
 
-- **Informacijsko curenje kroz error poruke:** Nedosledne error poruke (`"user not found"`, `"track not found"`, `"failed to decode subscriptions"`) mogu otkriti informacije o sistemu (npr. različite poruke za različite scenarije mogu otkriti da li resurs postoji, da li je problem sa bazom podataka, itd.). To može pomoći napadaču u reconnaissance fazi ili u crafting malicioznih payload-a.
+- **Information leakage via error messages:** Inconsistent error messages (`"user not found"`, `"track not found"`, `"failed to decode subscriptions"`) can reveal information about the system (for example, different messages for different scenarios can reveal whether a resource exists, whether the problem is with the database, etc.). This can help an attacker in reconnaissance or in crafting malicious payloads.
 
-**2. Duplikovani HTTP headeri i MIME type-ovi:**
+**2. Duplicated HTTP headers and MIME types:**
 
-- **Nedoslednost u HTTP odgovorima:** Ako se header (`"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"`) promeni na jednom mestu a ne na drugom, može doći do nedoslednosti u HTTP odgovorima. Napadač može iskoristiti nedoslednost da probije cache ili da izazove neočekivano ponašanje u klijentu (npr. pogrešan Content-Type može dovesti do XSS ako se fajl renderuje kao HTML umesto kao download).
+- **Inconsistent HTTP responses:** If a header (`"Content-Type"`, `"Content-Length"`, `"Accept-Ranges"`) is changed in one place but not another, HTTP responses can become inconsistent. An attacker can exploit these inconsistencies to bypass caches or cause unexpected client behavior (for example, a wrong `Content-Type` can lead to XSS if a file is rendered as HTML).
 
-- **MIME type confusion:** Ako se MIME type (`"audio/mpeg"`) promeni na jednom mestu, može doći do nedoslednosti — fajl može biti poslužen sa pogrešnim Content-Type, što može dovesti do problema sa bezbednošću (npr. ako se audio fajl posluži kao `text/html`, browser može pokušati da ga renderuje).
+- **MIME type confusion:** If the MIME type (`"audio/mpeg"`) is changed in one place but not another, files can be served with incorrect `Content-Type`, leading to security problems (for example, audio served as `text/html`).
 
-**3. Visoka Cognitive Complexity:**
+**3. High Cognitive Complexity:**
 
-- **Logičke greške u kritičnim funkcijama:** Složene funkcije (Complexity > 15) su teže za razumevanje i održavanje, što povećava verovatnoću grešaka. U `user_handler.go:154` (Complexity 30) i `auth_middleware.go:15` (Complexity 20) — kritične tačke za autentifikaciju — visoka složenost može maskirati logičke greške koje napadač može iskoristiti (npr. propuštanje provere, pogrešna logika autorizacije, edge case-ovi koji nisu pokriveni).
+- **Logic errors in critical functions:** Complex functions (Complexity > 15) are harder to understand and maintain, increasing the probability of errors. In `user_handler.go:154` (Complexity 30) and `auth_middleware.go:15` (Complexity 20) — critical authentication points — high complexity can hide logic errors that an attacker could exploit (for example missing checks, wrong authorization logic, uncovered edge cases).
 
-- **Teškoća u code review-u:** Visoka složenost otežava code review, što povećava verovatnoću da se propuste sigurnosni problemi. Napadač može iskoristiti edge case-ove koji nisu uočeni tokom review-a.
+- **Difficult code review:** High complexity makes code review harder and increases the likelihood of missed security issues. Attackers can exploit edge cases that were not detected during review.
 
-**4. Nizak code coverage (0.0% na svim servisima):**
+**4. Low code coverage (0.0% in all services):**
 
-- **Nedetektovane regresije:** Bez testova, promene u kodu mogu uvesti nove ranjivosti koje neće biti detektovane. Napadač može iskoristiti regresije koje su uveđene tokom refaktorisanja ili dodavanja novih funkcionalnosti.
+- **Undetected regressions:** Without tests, code changes can introduce new vulnerabilities that remain unnoticed. Attackers can exploit regressions introduced during refactoring or new feature development.
 
-- **Nepokriveni edge case-ovi:** Bez testova, edge case-ovi (npr. granične vrednosti, null pointer dereferences, race conditions) mogu ostati neotkriveni i eksploatisani od strane napadača.
+- **Uncovered edge cases:** Without tests, edge cases (for example boundary values, null pointer dereferences, race conditions) may remain undetected and exploitable.
 
-**5. Visok procenat duplikata (posebno u user-service handler direktorijumu — 17.1%):**
+**5. High duplication percentage (especially in user-service handler directory — 17.1%):**
 
-- **Propagacija grešaka:** Ako se greška uveđe u duplirani kod, propagira se na sva mesta gde se taj kod koristi. Napadač može iskoristiti grešku na svim instancama dupliranog koda.
+- **Propagation of errors:** If a bug is introduced in duplicated code, it propagates to every location that uses that code. Attackers can exploit the same bug across all duplicated instances.
 
-- **Teškoća u održavanju:** Visok procenat duplikata otežava održavanje i refaktorisanje, što povećava verovatnoću da se uveđu nove ranjivosti tokom izmena.
+- **Maintenance difficulties:** High duplication makes maintenance and refactoring more difficult, increasing the probability of introducing new vulnerabilities during changes.
 
 ---
 
-### 6.4 Kako prevazići identifikovane ranjivosti
+### 6.4 How to Remediate the Identified Weaknesses
 
-Na osnovu SonarQube Issues i Security Hotspots analize, evo konkretnih preporuka za prevazilaženje identifikovanih problema:
+Based on SonarQube Issues and Security Hotspots analysis, here are concrete remediation recommendations:
 
-#### 1. Refaktorisanje dupliranih literala u konstante
+#### 1. Refactor Duplicated Literals into Constants
 
-**Prioritet: VISOK** — utiče na 17 od 20 issues.
+**Priority: HIGH** — affects 17 of 20 issues.
 
-**Za svaki servis, kreirati centralizovane konstante:**
+**For each service, create centralized constants:**
 
 **content-service:**
+
 ```go
-// U handler/content_handler.go ili u poseban constants.go
+// In handler/content_handler.go or a dedicated constants.go
 const (
     ErrArtistIDRequired = "artist id is required"
-    ErrInvalidInput = "invalid or potentially malicious input detected"
+    ErrInvalidInput     = "invalid or potentially malicious input detected"
 )
 
-// U repository/content_repository.go
+// In repository/content_repository.go
 const (
     MongoOptionKey = "$options"
-    MongoRegexKey = "$regex"
+    MongoRegexKey  = "$regex"
 )
 ```
 
 **user-service:**
+
 ```go
-// U handler/user_handler.go
+// In handler/user_handler.go
 const HeaderXUserID = "X-User-ID"
 
-// U service/user_service.go
+// In service/user_service.go
 const ErrUserNotFound = "user not found"
 ```
 
 **notifications-service:**
+
 ```go
-// U handler/notification_handler.go ili u poseban security/constants.go
+// In handler/notification_handler.go or a dedicated security/constants.go
 const ErrInvalidMaliciousInput = "invalid or potentially malicious input detected"
 ```
 
 **storage-service:**
+
 ```go
-// U handler/storage_handler.go
+// In handler/storage_handler.go
 const (
-    ErrTrackIDRequired = "track_id is required"
-    HeaderContentType = "Content-Type"
-    HeaderContentLength = "Content-Length"
-    HeaderAcceptRanges = "Accept-Ranges"
+    ErrTrackIDRequired   = "track_id is required"
+    HeaderContentType    = "Content-Type"
+    HeaderContentLength  = "Content-Length"
+    HeaderAcceptRanges   = "Accept-Ranges"
 )
 
-// U hdfs/client.go
+// In hdfs/client.go
 const (
-    ErrTrackNotFound = "track not found: %s"
+    ErrTrackNotFound    = "track not found: %s"
     ErrFailedToStatFile = "failed to stat file: %w"
-    MIMETypeAudioMPEG = "audio/mpeg"
+    MIMETypeAudioMPEG   = "audio/mpeg"
 )
 ```
 
 **subscriptions-service:**
+
 ```go
-// U handler/subscription_handler.go
+// In handler/subscription_handler.go
 const ErrUserNotAuthenticated = "user not authenticated"
 
-// U repository/subscription_repository.go
+// In repository/subscription_repository.go
 const ErrFailedToDecodeSubscriptions = "failed to decode subscriptions: %w"
 ```
 
-**Akcije:**
-- Zameniti sve pojave dupliranih literala sa konstantama.
-- Razmotriti kreiranje centralizovanog security error handling modula koji koristi konstante i obezbeđuje konzistentno logovanje i response za sve slučajeve malicioznog inputa.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su issues rešeni.
+**Actions:**
 
-#### 2. Smanjenje Cognitive Complexity
+- Replace all occurrences of duplicated literals with constants.
+- Consider creating a centralized security error handling module that uses constants and provides consistent logging and responses for all malicious input cases.
+- After changes, rerun the SonarQube scan to confirm that issues are resolved.
 
-**Prioritet: VISOK** — utiče na 4 issues u user-service (kritične funkcije za autentifikaciju).
+#### 2. Reduce Cognitive Complexity
 
-**Refaktorisanje složenih funkcija:**
+**Priority: HIGH** — affects 4 issues in user-service (critical auth functions).
+
+**Refactor complex functions:**
 
 **`handler/user_handler.go:154` (Complexity 30):**
-- Podeliti funkciju u manje funkcije sa jasnom odgovornošću.
-- Izvući zajedničke delove u helper funkcije.
-- Koristiti early returns da se smanji ugnježdenost.
+
+- Split the function into smaller functions with clear responsibilities.
+- Extract common parts into helper functions.
+- Use early returns to reduce nesting.
 
 **`middleware/auth_middleware.go:15` (Complexity 20):**
-- Izvući validaciju tokena u posebnu funkciju.
-- Izvući proveru autorizacije u posebnu funkciju.
-- Koristiti strategy pattern za različite tipove autentifikacije.
+
+- Extract token validation into a separate function.
+- Extract authorization checks into a separate function.
+- Consider using a strategy pattern for different authentication types.
 
 **`service/user_service.go:426` (Complexity 17):**
-- Podeliti funkciju u manje funkcije.
-- Izvući validaciju i business logiku u posebne funkcije.
+
+- Split the function into smaller units.
+- Extract validation and business logic into separate functions.
 
 **`utils/password_validator.go:8` (Complexity 16):**
-- Podeliti validaciju lozinke u manje funkcije (npr. `validateLength`, `validateComplexity`, `validateCommonPasswords`).
 
-**Akcije:**
-- Refaktorisati funkcije da imaju Complexity ≤ 15.
-- Dodati unit testove za refaktorisane funkcije da se osigura da funkcionalnost nije promenjena.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su issues rešeni.
+- Split password validation into smaller functions (for example `validateLength`, `validateComplexity`, `validateCommonPasswords`).
 
-#### 3. Dodavanje code coverage testova
+**Actions:**
 
-**Prioritet: KRITIČAN** — trenutno 0.0% coverage na svim servisima; Quality Gate zahteva ≥ 80%.
+- Refactor functions to keep Complexity ≤ 15.
+- Add unit tests for refactored functions to ensure functionality is preserved.
+- After changes, rerun the SonarQube scan to confirm issues are resolved.
 
-**Plan dodavanja testova:**
+#### 3. Add Code Coverage Tests
 
-**Faza 1 — Unit testovi za kritične funkcije:**
-- Autentifikacija/autorizacija (user-service, subscriptions-service)
-- Input validacija (content-service, notifications-service)
+**Priority: CRITICAL** — currently 0.0% coverage across all services; Quality Gate requires ≥ 80%.
+
+**Test plan:**
+
+**Phase 1 — Unit tests for critical functions:**
+
+- Authentication/authorization (user-service, subscriptions-service)
+- Input validation (content-service, notifications-service)
 - File handling (storage-service)
 - Password validation (user-service)
 
-**Faza 2 — Integration testovi:**
-- API endpoint-ovi (svi servisi)
-- Database operations (svi servisi)
-- External service calls (npr. HDFS u storage-service)
+**Phase 2 — Integration tests:**
 
-**Faza 3 — End-to-end testovi:**
-- Kompletni user flow-ovi
-- Cross-service komunikacija
+- API endpoints (all services)
+- Database operations (all services)
+- External service calls (for example HDFS in storage-service)
 
-**Akcije:**
-- Kreirati `*_test.go` fajlove za svaki modul.
-- Koristiti Go testing framework (`testing` package) i mock biblioteke (npr. `testify/mock`).
-- Integrisati testove u CI/CD pipeline da se automatski pokreću pre merge-a.
-- Postaviti prag coverage-a (npr. 80%) u SonarQube Quality Gate.
-- Nakon dodavanja testova, ponoviti SonarQube sken da se potvrdi da je coverage povećan.
+**Phase 3 — End-to-end tests:**
 
-#### 4. Smanjenje duplikata koda
+- Complete user flows
+- Cross-service communication
 
-**Prioritet: SREDNJI** — posebno kritično za user-service handler direktorijum (17.1% duplikata).
+**Actions:**
 
-**Strategija smanjenja duplikata:**
+- Create `*_test.go` files for each module.
+- Use the Go `testing` package and mocking libraries (for example `testify/mock`).
+- Integrate tests into the CI/CD pipeline so they run automatically before merges.
+- Set a coverage threshold (for example 80%) in the SonarQube Quality Gate.
+- After adding tests, rerun the SonarQube scan to confirm coverage has increased.
 
-**user-service handler direktorijum:**
-- Izvući zajedničke delove u helper funkcije ili middleware.
-- Koristiti generičke funkcije za zajedničke operacije (npr. error handling, response formatting).
-- Refaktorisati duplirane blokove koda u reusable komponente.
+#### 4. Reduce Code Duplication
+
+**Priority: MEDIUM** — especially critical for user-service `handler` directory (17.1% duplication).
+
+**Duplication reduction strategy:**
+
+**user-service handler directory:**
+
+- Extract common parts into helper functions or middleware.
+- Use generic functions for repeated operations (for example error handling, response formatting).
+- Refactor duplicated code blocks into reusable components.
 
 **content-service:**
-- Refaktorisati duplikate u `content_handler.go` (13.3% duplikata) — izvući zajedničke delove u funkcije ili konstante.
 
-**Akcije:**
-- Identifikovati duplirane blokove koda pomoću SonarQube Duplications tab-a.
-- Refaktorisati duplikate u reusable komponente.
-- Nakon izmene, ponoviti SonarQube sken da se potvrdi da su duplikati smanjeni.
+- Refactor duplications in `content_handler.go` (13.3% duplication) — extract common parts into functions or constants.
 
-#### 5. Praćenje i održavanje
+**Actions:**
 
-**Akcije:**
-- Redovno pokretanje SonarQube skenova (npr. pre svakog merge-a ili dnevno).
-- Praćenje Quality Gate-a — blokirati merge ako Quality Gate padne.
-- Code review fokusiran na:
-  - Duplikovane literale (posebno security-relevantni)
-  - Cognitive Complexity (posebno za kritične funkcije)
-  - Code coverage (osigurati da novi kod ima testove)
-- Automatizacija: integrisati SonarQube u CI/CD pipeline da automatski proverava Quality Gate i blokira merge ako ne prođe.
+- Identify duplicated code blocks via the SonarQube Duplications tab.
+- Refactor duplicated code into reusable components.
+- After changes, rerun the SonarQube scan to confirm duplications have decreased.
+
+#### 5. Monitoring and Maintenance
+
+**Actions:**
+
+- Run SonarQube scans regularly (for example before each merge or daily).
+- Monitor the Quality Gate — block merges if the Quality Gate fails.
+- Focus code review on:
+  - Duplicated literals (especially security-relevant ones)
+  - Cognitive Complexity (especially for critical functions)
+  - Code coverage (ensure new code has tests)
+- Automation: integrate SonarQube into the CI/CD pipeline to automatically check the Quality Gate and block merges if it fails.
 
 ---
 
-### 6.5 Kako se zaštititi od eksploatacije
+### 6.5 How to Protect Against Exploitation
 
-Zaštita od eksploatacije identifikovanih ranjivosti zahteva kombinaciju **preventivnih mera** (SonarQube skenovi, code review, testovi) i **reaktivnih mera** (monitoring, incident response), povezanih sa postojećim kontrolama iz sekcija 1–6.
+Protecting against exploitation of identified weaknesses requires a combination of **preventive measures** (SonarQube scans, code review, tests) and **reactive measures** (monitoring, incident response), tied to the controls described in Sections 1–6.
 
-#### 1. Preventivne mere — SonarQube integracija
+#### 1. Preventive Measures — SonarQube Integration
 
-**Redovno pokretanje SonarQube skenova:**
+**Regular SonarQube scans:**
 
-- **Pre merge-a:** Automatski pokretati SonarQube sken za svaki pull request. Blokirati merge ako Quality Gate padne ili ako se uveđu novi Security/Reliability issues.
-- **Dnevno/nedeljno:** Pokretati skenove za sve servise da se otkriju issues koji su možda propušteni tokom development-a.
-- **Pre release-a:** Obavezno pokretati skenove pre svakog release-a i osigurati da su svi kritični issues rešeni.
+- **Before merge:** Automatically run SonarQube scans for each pull request. Block merges if the Quality Gate fails or if new Security/Reliability issues are introduced.
+- **Daily/weekly:** Run scans for all services to detect issues that may have been missed during development.
+- **Before release:** Run scans before each release and ensure all critical issues are resolved.
 
-**Praćenje Quality Gate-a:**
+**Monitoring the Quality Gate:**
 
-- **Postaviti Quality Gate kriterijume:**
+- **Configure Quality Gate criteria:**
   - Security: 0 issues (Critical, High, Medium)
   - Reliability: 0 issues (Critical, High)
-  - Maintainability: ≤ 10 issues (High) — trenutno 20, cilj smanjiti na ≤ 10
-  - Coverage: ≥ 80% — trenutno 0%, cilj postepeno povećati
-  - Duplications: ≤ 3% — trenutno 0–4.25%, osigurati da ne prelazi 3%
-- **Blokirati merge ako Quality Gate padne:** Integrisati SonarQube u CI/CD pipeline (npr. GitHub Actions, GitLab CI) da automatski proverava Quality Gate i blokira merge ako ne prođe.
+  - Maintainability: ≤ 10 High severity issues — currently 20, with a goal to reduce to ≤ 10
+  - Coverage: ≥ 80% — currently 0%, with a goal to increase gradually
+  - Duplications: ≤ 3% — currently 0–4.25%, ensure it does not exceed 3%
+- **Block merges if the Quality Gate fails:** Integrate SonarQube into CI/CD (for example GitHub Actions, GitLab CI) to automatically check the Quality Gate and block merges if it does not pass.
 
+#### 2. Preventive Measures — Development and Testing
 
-#### 2. Preventivne mere — razvoj i testiranje
+**Adding tests for higher coverage:**
 
-**Dodavanje testova za veći coverage:**
+- **Unit tests:** Cover critical functions (authentication, validation, file handling). Target: ≥ 80% coverage in all services.
+- **Integration tests:** Cover API endpoints and database operations.
+- **Security tests:** Add tests for edge cases (malicious input, invalid tokens, unauthorized access) to ensure vulnerabilities are not introduced during refactoring.
 
-- **Unit testovi:** Pokrivati kritične funkcije (autentifikacija, validacija, file handling) sa unit testovima. Cilj: ≥ 80% coverage na svim servisima.
-- **Integration testovi:** Pokrivati API endpoint-ove i database operations sa integration testovima.
-- **Security testovi:** Dodati testove za edge case-ove (npr. maliciozni input, invalid tokens, unauthorized access) da se osigura da se ranjivosti ne uveđu tokom refaktorisanja.
+**Reducing duplications:**
 
-**Smanjenje duplikata:**
+- **Refactor duplicated blocks:** Use the SonarQube Duplications tab to identify duplicated code and refactor it into reusable components.
+- **Monitor Duplications metric:** Regularly monitor Duplications per directory; user-service handler directory (17.1%) is especially critical.
 
-- **Refaktorisanje dupliranih blokova:** Identifikovati duplirane blokove koda pomoću SonarQube Duplications tab-a i refaktorisati ih u reusable komponente.
-- **Praćenje Duplications metrike:** Redovno praćenje Duplications metrike po direktorijumu; posebno kritično za user-service handler direktorijum (17.1% duplikata).
+#### 3. Reactive Measures — Monitoring and Incident Response
 
+**Centralized logging and monitoring:**
 
-#### 3. Reaktivne mere — monitoring i incident response
-
-**Centralizovano logovanje i monitoring:**
-
-- **Integracija sa postojećim logging sistemom (sekcija 5 — Security Roadmap):** Centralizovati logove iz svih servisa u centralni store (npr. ELK, Loki, SIEM) da se podrži detekcija, alerting i incident response.
-- **Logovanje security-relevantnih događaja:**
-  - Autentifikacione greške (npr. `"user not authenticated"`, invalid tokens)
-  - Input validation greške (npr. `"invalid or potentially malicious input detected"`)
-  - Autorizacione greške (npr. unauthorized access attempts)
+- **Integrate with the logging system (see Section 5 — Security Roadmap):** Centralize logs from all services into a single store (for example ELK, Loki, SIEM) to support detection, alerting and incident response.
+- **Log security-relevant events:**
+  - Authentication errors (for example `"user not authenticated"`, invalid tokens)
+  - Input validation errors (for example `"invalid or potentially malicious input detected"`)
+  - Authorization errors (for example unauthorized access attempts)
   - Rate limit hits (DoS mitigation)
-- **Alerting:** Postaviti alertove za:
-  - Neobične autentifikacione greške (npr. više od X neuspešnih pokušaja u kratkom vremenu)
-  - Detekciju malicioznog inputa (npr. SQL injection, XSS patterns)
-  - Neautorizovane pristupe (npr. pokušaji pristupa admin endpoint-ima)
+- **Alerting:** Configure alerts for:
+  - Unusual authentication failures (for example more than X failed attempts in a short period)
+  - Detection of malicious input (for example SQL injection, XSS patterns)
+  - Unauthorized access attempts (for example attempts to reach admin endpoints)
 
 **Incident response:**
 
-- **Procedura za incident response:** Definirati proceduru za rukovanje sigurnosnim incidentima (npr. detekcija ranjivosti, eksploatacija, false positive).
-- **Povezivanje sa SonarQube nalazima:** Ako se detektuje eksploatacija ranjivosti koja je identifikovana u SonarQube-u, prioritizovati rešavanje tog issue-a.
+- **Incident response procedure:** Define a process for handling security incidents (for example detection of vulnerabilities, exploitation, false positives).
+- **Link to SonarQube findings:** If exploitation of an issue detected by SonarQube is observed, prioritize fixing that issue.
 
-#### 4. Autentifikacija i autorizacija:
+#### 4. Authentication and Authorization
 
-- **JWT validacija:** Osigurati da se JWT validacija izvršava konzistentno na svim endpoint-ima (refaktorisati duplikovane literale kao `"X-User-ID"`, `"user not authenticated"` u konstante).
-- **RBAC enforcement:** Osigurati da se RBAC provere izvršavaju konzistentno (refaktorisati funkcije sa visokom Cognitive Complexity u auth middleware i handler slojevima).
+- **JWT validation:** Ensure JWT validation is performed consistently on all endpoints (refactor duplicated literals such as `"X-User-ID"`, `"user not authenticated"` into constants).
+- **RBAC enforcement:** Ensure RBAC checks are enforced consistently (refactor high Complexity functions in auth middleware and handler layers).
 
-#### 5. Input validacija:
+#### 5. Input Validation
 
-- **Konzistentna validacija malicioznog inputa:** Osigurati da se validacija malicioznog inputa izvršava konzistentno na svim endpoint-ima (refaktorisati duplikovane literale kao `"invalid or potentially malicious input detected"` u konstante).
-- **XSS i SQL injection zaštita:** Osigurati da se XSS i SQL injection pattern checks izvršavaju konzistentno (dodati testove da se osigura da se ranjivosti ne uveđu tokom refaktorisanja).
+- **Consistent malicious input validation:** Ensure malicious input validation is performed consistently on all endpoints (refactor duplicated literals such as `"invalid or potentially malicious input detected"` into constants).
+- **XSS and SQL injection protection:** Ensure XSS and SQL injection pattern checks are applied consistently (add tests to ensure vulnerabilities are not introduced during refactoring).
 
-#### 6. Dos mitigation
+#### 6. DoS Mitigation
 
-- **Rate limiting:** Osigurati da se rate limiting izvršava konzistentno na svim endpoint-ima (dodati testove za rate limiting scenarije).
+- **Rate limiting:** Ensure rate limiting is consistently applied to all relevant endpoints (add tests for rate-limiting scenarios).
+
