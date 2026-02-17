@@ -187,7 +187,7 @@ The Spotify Clone applies a defense-in-depth, security-first approach across aut
 
 ---
 
-## 7. Analiza ranjivosti (zahtev 2.21)
+## 7. Analiza ranjivosti
 
 Zahtev 2.21 traži izveštaj o nivou bezbednosti aplikacije:
 
@@ -1287,14 +1287,6 @@ Zaštita od eksploatacije identifikovanih ranjivosti zahteva kombinaciju **preve
   - Duplications: ≤ 3% — trenutno 0–4.25%, osigurati da ne prelazi 3%
 - **Blokirati merge ako Quality Gate padne:** Integrisati SonarQube u CI/CD pipeline (npr. GitHub Actions, GitLab CI) da automatski proverava Quality Gate i blokira merge ako ne prođe.
 
-**Code review fokusiran na SonarQube issues:**
-
-- **Pre merge-a:** Code reviewer mora proveriti da li su svi SonarQube issues rešeni ili su prihvaćeni sa opravdanjem.
-- **Fokus na kritične oblasti:**
-  - Duplikovani literali (posebno security-relevantni kao `"invalid or potentially malicious input detected"`, `"user not authenticated"`)
-  - Cognitive Complexity (posebno za kritične funkcije kao auth middleware, password validation)
-  - Code coverage (osigurati da novi kod ima testove)
-- **Automatski komentari:** Integrisati SonarQube bot u pull request da automatski komentariše issues i blokira merge ako postoje kritični problemi.
 
 #### 2. Preventivne mere — razvoj i testiranje
 
@@ -1309,10 +1301,6 @@ Zaštita od eksploatacije identifikovanih ranjivosti zahteva kombinaciju **preve
 - **Refaktorisanje dupliranih blokova:** Identifikovati duplirane blokove koda pomoću SonarQube Duplications tab-a i refaktorisati ih u reusable komponente.
 - **Praćenje Duplications metrike:** Redovno praćenje Duplications metrike po direktorijumu; posebno kritično za user-service handler direktorijum (17.1% duplikata).
 
-**Pregled Security Hotspots:**
-
-- **Ručni pregled:** Redovno pregledati Security Hotspots u SonarQube-u i označiti ih kao "Safe" ili "Vulnerable" sa komentarima.
-- **Dokumentacija:** Dokumentovati razloge za označavanje hotspot-a kao "Safe" ili "Vulnerable" da se osigura konzistentnost u budućnosti.
 
 #### 3. Reaktivne mere — monitoring i incident response
 
@@ -1334,50 +1322,16 @@ Zaštita od eksploatacije identifikovanih ranjivosti zahteva kombinaciju **preve
 - **Procedura za incident response:** Definirati proceduru za rukovanje sigurnosnim incidentima (npr. detekcija ranjivosti, eksploatacija, false positive).
 - **Povezivanje sa SonarQube nalazima:** Ako se detektuje eksploatacija ranjivosti koja je identifikovana u SonarQube-u, prioritizovati rešavanje tog issue-a.
 
-#### 4. Povezivanje sa postojećim kontrolama (sekcije 1–6)
-
-**Autentifikacija i autorizacija (sekcija 3.1, 3.2):**
+#### 4. Autentifikacija i autorizacija:
 
 - **JWT validacija:** Osigurati da se JWT validacija izvršava konzistentno na svim endpoint-ima (refaktorisati duplikovane literale kao `"X-User-ID"`, `"user not authenticated"` u konstante).
 - **RBAC enforcement:** Osigurati da se RBAC provere izvršavaju konzistentno (refaktorisati funkcije sa visokom Cognitive Complexity u auth middleware i handler slojevima).
 
-**Input validacija (sekcija 3.4):**
+#### 5. Input validacija:
 
 - **Konzistentna validacija malicioznog inputa:** Osigurati da se validacija malicioznog inputa izvršava konzistentno na svim endpoint-ima (refaktorisati duplikovane literale kao `"invalid or potentially malicious input detected"` u konstante).
 - **XSS i SQL injection zaštita:** Osigurati da se XSS i SQL injection pattern checks izvršavaju konzistentno (dodati testove da se osigura da se ranjivosti ne uveđu tokom refaktorisanja).
 
-**DoS mitigation (sekcija 3.3):**
+#### 6. Dos mitigation
 
 - **Rate limiting:** Osigurati da se rate limiting izvršava konzistentno na svim endpoint-ima (dodati testove za rate limiting scenarije).
-- **Monitoring:** Praćenje rate limit hits u centralizovanom logging sistemu da se detektuju DoS pokušaji.
-
-**Infrastruktura i izolacija (sekcija 3.5):**
-
-- **Mikroservisi izolacija:** Osigurati da se sigurnosni problemi u jednom servisu ne propagiraju na druge servise (refaktorisati duplikovane literale i smanjiti Cognitive Complexity da se smanji verovatnoća grešaka).
-
-#### 5. Kontinuirano poboljšanje
-
-**Redovni pregledi:**
-
-- **Mesečni pregledi:** Mesečno pregledati SonarQube nalaze i prioritizovati rešavanje issues prema riziku (Security > Reliability > Maintainability).
-- **Kvartalni pregledi:** Kvartalno pregledati Quality Gate kriterijume i ažurirati ih prema promenama u projektu.
-
-**Edukacija i svest:**
-
-- **Developer training:** Obučiti developere o SonarQube best practices (npr. kako izbegavati duplikovane literale, kako smanjiti Cognitive Complexity, kako dodati testove).
-- **Security awareness:** Povećati security awareness među developerima kroz redovne sesije i dokumentaciju.
-
-**Automatizacija:**
-
-- **CI/CD integracija:** Integrisati SonarQube u CI/CD pipeline da automatski proverava Quality Gate i blokira merge ako ne prođe.
-- **Automatski komentari:** Integrisati SonarQube bot u pull request da automatski komentariše issues i blokira merge ako postoje kritični problemi.
-- **Automatski skenovi:** Postaviti automatske skenove (npr. dnevno) da se otkriju issues koji su možda propušteni tokom development-a.
-
----
-
-**Zaključak:** Kombinacija **preventivnih mera** (SonarQube skenovi, code review, testovi) i **reaktivnih mera** (monitoring, incident response), povezanih sa postojećim kontrolama iz sekcija 1–6, obezbeđuje **defense-in-depth** pristup zaštiti od eksploatacije identifikovanih ranjivosti. Redovno praćenje SonarQube nalaza i kontinuirano poboljšanje kvaliteta koda smanjuje verovatnoću da se ranjivosti uveđu ili eksploatišu.
-
----
-
-**Status:** ✅ **content-service** — završeno | ✅ **user-service** — završeno | ✅ **notifications-service** — završeno | ✅ **storage-service** — završeno | ✅ **subscriptions-service** — završeno | ✅ **Sekcije 7.3, 7.4 i 7.5** — završeno  
-**Izveštaj je kompletan:** Svi servisi su analizirani i izveštaj za zahtev 2.21 (Analiza ranjivosti) je završen.
