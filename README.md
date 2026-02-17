@@ -528,25 +528,13 @@ We defend against the following high-level threats; controls are summarized in t
 
 ---
 
-## 5. Security Roadmap (Work in Progress)
-
-The following improvements are planned or in progress to strengthen the security posture and support SOC-style operations.
-
-| Initiative | Status | Description |
-|------------|--------|-------------|
-| **Centralized Logging & Monitoring** | In progress | Aggregating logs from Nginx and all services into a central store (e.g. ELK, Loki, or SIEM). Standardizing log format (e.g. auth events, rate-limit hits, errors) to support **detection, alerting, and incident response** — essential for SOC analysis. |
-| **Multi-Factor Authentication (MFA)** | Planned | Introduction of a second factor (e.g. TOTP or email OTP) for high-risk actions or for all logins. Complements existing password and JWT design and reduces impact of credential theft. |
-| **Password hashing** | Optional future | Evaluation of **Argon2** (e.g. Argon2id) as an alternative or complement to BCrypt for new passwords, in line with current recommendations for memory-hard hashing. |
-
----
-
-## 6. Summary
+## 5. Summary
 
 The Spotify Clone applies a **defense-in-depth**, **security-first** approach across authentication (HTTPS, BCrypt, JWT), authorization (RBAC on every protected request), availability (rate limiting and DoS controls), and input validation (whitelisting, sanitization, XSS/SQL pattern checks). The system is built as a **distributed, environment-isolated** set of services behind a hardened reverse proxy, with a clear **threat model** aligned to OWASP Top 10 and a **security roadmap** focused on centralized logging/monitoring and MFA.
 
 ---
 
-## 7. Analiza ranjivosti (zahtev 2.21)
+## 6. Analiza ranjivosti (zahtev 2.21)
 
 Izveštaj o nivou bezbednosti aplikacije obuhvata:
 
@@ -557,7 +545,7 @@ Izveštaj o nivou bezbednosti aplikacije obuhvata:
 
 ---
 
-### 7.1 Alati korišćeni za identifikaciju ranjivosti
+### 6.1 Alati korišćeni za identifikaciju ranjivosti
 
 - **SonarQube (Community Edition)** — statička analiza koda i kvaliteta, pokreće se lokalno preko Docker-a.  
   Analizira: ranjivosti (Security), bugove (Reliability), code smells (Maintainability), pokrivenost testovima (Coverage), duplikate (Duplications).  
@@ -571,7 +559,7 @@ Projekti: http://localhost:9001/projects ; pojedinačni: http://localhost:9001/d
 
 ---
 
-### 7.2 Rezultati po servisu — šta da slikaš (korak po korak)
+### 6.2 Rezultati po servisu — šta da slikaš (korak po korak)
 
 Za svaki servis redom uradimo isti set slika; zatim na osnovu slika sastavljamo tekst: identifikovane ranjivosti, kako se mogu eksploatisati, kako prevazići, kako se zaštititi.
 
@@ -1024,7 +1012,7 @@ Za svaki servis redom uradimo isti set slika; zatim na osnovu slika sastavljamo 
 
 ---
 
-### 7.3 Identifikovane ranjivosti i kako se mogu eksploatisati
+### 6.3 Identifikovane ranjivosti i kako se mogu eksploatisati
 
 Na osnovu SonarQube analize svih 5 Go mikroservisa, identifikovano je **ukupno 20 Maintainability issues** (svi High severity). **Nema direktnih Security vulnerabilities ili Reliability bugova** (svi servisi imaju A rating za Security i Reliability). Međutim, Maintainability issues mogu indirektno uticati na bezbednost i mogu se potencijalno eksploatisati.
 
@@ -1105,7 +1093,7 @@ Na osnovu SonarQube analize svih 5 Go mikroservisa, identifikovano je **ukupno 2
 
 ---
 
-### 7.4 Kako prevazići identifikovane ranjivosti
+### 6.4 Kako prevazići identifikovane ranjivosti
 
 Na osnovu SonarQube Issues i Security Hotspots analize, evo konkretnih preporuka za prevazilaženje identifikovanih problema:
 
@@ -1265,7 +1253,7 @@ const ErrFailedToDecodeSubscriptions = "failed to decode subscriptions: %w"
 
 ---
 
-### 7.5 Kako se zaštititi od eksploatacije
+### 6.5 Kako se zaštititi od eksploatacije
 
 Zaštita od eksploatacije identifikovanih ranjivosti zahteva kombinaciju **preventivnih mera** (SonarQube skenovi, code review, testovi) i **reaktivnih mera** (monitoring, incident response), povezanih sa postojećim kontrolama iz sekcija 1–6.
 
