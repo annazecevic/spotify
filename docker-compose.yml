@@ -173,6 +173,18 @@ services:
     networks:
       - spotify-network
 
+  ratings-mongodb:
+    image: mongo:7.0
+    container_name: spotify-rating-mongodb
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_DATABASE: spotify_rating
+    volumes:
+      - rating_mongodb_data:/data/db
+    networks:
+      - spotify-network
+
   subscriptions-service:
     build:
       context: ./services/subscriptions-service
@@ -222,6 +234,32 @@ services:
     networks:
       - spotify-network
 
+  rating-service:
+    build:
+      context: ./services/rating-service
+      dockerfile: Dockerfile
+    container_name: spotify-rating-service
+    ports:
+      - "8084:8084"
+    env_file:
+      - ./services/rating-service/.env
+    environment:
+      MONGO_URI: mongodb://rating-mongodb:27017
+      MONGO_DATABASE: spotify_ratings
+      SERVER_PORT: 8084
+      ENVIRONMENT: development
+      CONTENT_SERVICE_URL: http://content-service:8081
+      USER_SERVICE_URL: http://user-service:8080
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      LOG_FILE_PATH: /var/log/rating-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - rating_service_logs:/var/log/rating-service
+    depends_on:
+      - ratings-mongodb
+    networks:
+      - spotify-network
+
 networks:
   spotify-network:
     driver: bridge
@@ -229,6 +267,7 @@ networks:
 volumes:
   mongodb_data:
   subscriptions_mongodb_data:
+  rating_mongodb_data:
   cassandra_data:
   hadoop_namenode:
   hadoop_datanode1:
@@ -238,3 +277,5 @@ volumes:
   notifications_service_logs:
   subscriptions_service_logs:
   storage_service_logs:
+  rating_service_logs:
+
