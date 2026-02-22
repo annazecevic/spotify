@@ -11,6 +11,8 @@ type Config struct {
 	ServerPort        string
 	Environment       string
 	JWTSecret         string
+	NatsURL                string
+	SubscriptionsServiceURL string
 
 	// Logging
 	LogFilePath   string
@@ -28,11 +30,13 @@ func LoadConfig() *Config {
 	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 
 	return &Config{
-		CassandraHosts:    []string{hosts},
-		CassandraKeyspace: keyspace,
-		ServerPort:        port,
-		Environment:       env,
-		JWTSecret:         jwtSecret,
+		CassandraHosts:          []string{hosts},
+		CassandraKeyspace:       keyspace,
+		ServerPort:              port,
+		Environment:             env,
+		JWTSecret:               jwtSecret,
+		NatsURL:                 getEnv("NATS_URL", "nats://nats:4222"),
+		SubscriptionsServiceURL: getEnv("SUBSCRIPTIONS_SERVICE_URL", "http://subscriptions-service:8083"),
 
 		LogFilePath:   getEnv("LOG_FILE_PATH", "/var/log/notifications-service/app.log"),
 		LogHMACKey:    getEnv("LOG_HMAC_KEY", "default-hmac-key-change-in-production"),

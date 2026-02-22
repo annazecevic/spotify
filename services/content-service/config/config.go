@@ -10,6 +10,7 @@ type Config struct {
 	MongoDB     string
 	ServerPort  string
 	Environment string
+	NatsURL     string
 
 	// Logging
 	LogFilePath   string
@@ -25,6 +26,7 @@ func Load() *Config {
 		MongoDB:     getEnv("MONGO_DATABASE", "content_db"),
 		ServerPort:  getEnv("SERVER_PORT", "8081"),
 		Environment: getEnv("ENVIRONMENT", "development"),
+		NatsURL:     getEnv("NATS_URL", "nats://nats:4222"),
 
 		LogFilePath:   getEnv("LOG_FILE_PATH", "/var/log/content-service/app.log"),
 		LogHMACKey:    getEnv("LOG_HMAC_KEY", "default-hmac-key-change-in-production"),

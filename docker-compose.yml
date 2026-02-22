@@ -45,12 +45,14 @@ services:
       - ./services/content-service/.env
     environment:
       ENVIRONMENT: development
+      NATS_URL: nats://nats:4222
       LOG_FILE_PATH: /var/log/content-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - content_service_logs:/var/log/content-service
     depends_on:
       - mongodb
+      - nats
     networks:
       - spotify-network
 
@@ -73,6 +75,21 @@ services:
       timeout: 10s
       retries: 5
 
+  nats:
+    image: nats:2.10-alpine
+    container_name: spotify-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222"]
+    networks:
+      - spotify-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   notifications-service:
     build:
       context: ./services/notifications-service
@@ -84,12 +101,16 @@ services:
       - ./services/notifications-service/.env
     environment:
       ENVIRONMENT: development
+      NATS_URL: nats://nats:4222
+      SUBSCRIPTIONS_SERVICE_URL: http://subscriptions-service:8083
       LOG_FILE_PATH: /var/log/notifications-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - notifications_service_logs:/var/log/notifications-service
     depends_on:
       cassandra:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     networks:
       - spotify-network

@@ -9,6 +9,7 @@ import (
 	"github.com/annazecevic/content-service/config"
 	"github.com/annazecevic/content-service/handler"
 	"github.com/annazecevic/content-service/logger"
+	"github.com/annazecevic/content-service/messaging"
 	"github.com/annazecevic/content-service/middleware"
 	"github.com/annazecevic/content-service/repository"
 	"github.com/annazecevic/content-service/service"
@@ -45,7 +46,16 @@ func main() {
 	logger.Info(logger.EventDBConnection, "Connected to MongoDB successfully", nil)
 
 	repo := repository.NewContentRepository(db)
-	svc := service.NewContentService(repo)
+
+	publisher, err := messaging.NewPublisher(cfg.NatsURL)
+	if err != nil {
+		logger.Fatal(logger.EventGeneral, "Failed to connect to NATS", logger.Fields("error", err.Error()))
+	}
+	defer publisher.Close()
+
+	logger.Info(logger.EventGeneral, "Connected to NATS successfully", nil)
+
+	svc := service.NewContentService(repo, publisher)
 	h := handler.NewContentHandler(svc)
 
 	r := gin.Default()
