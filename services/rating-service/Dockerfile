@@ -1,4 +1,4 @@
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
@@ -20,6 +20,6 @@ WORKDIR /root/
 
 COPY --from=builder /app/rating-service .
 
-EXPOSE 8082
+EXPOSE 8085
 
 CMD ["./rating-service"]

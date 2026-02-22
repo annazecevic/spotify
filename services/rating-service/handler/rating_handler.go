@@ -114,7 +114,7 @@ func (h *RatingHandler) GetAverageRating(c *gin.Context) {
 		return
 	}
 
-	avg, err := h.service.GetAverageRating(trackID)
+	avg, count, err := h.service.GetAverageRating(trackID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -123,7 +123,7 @@ func (h *RatingHandler) GetAverageRating(c *gin.Context) {
 	response := dto.AverageRatingResponse{
 		TrackID: trackID,
 		Average: avg,
-		Count:   0,
+		Count:   count,
 	}
 
 	c.JSON(http.StatusOK, response)

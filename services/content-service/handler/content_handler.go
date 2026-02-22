@@ -36,6 +36,7 @@ func (h *ContentHandler) RegisterRoutes(r *gin.Engine) {
 	g.GET("/albums/:id/tracks", h.GetAlbumTracks)
 	g.GET("/tracks", h.ListTracks)
 	g.GET("/tracks/search", h.SearchTracks)
+	g.GET("/tracks/:id", h.GetTrack)
 
 	g.POST("/genres", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateGenre)
 	g.POST("/artists", middleware.AuthMiddleware(), middleware.AdminOnly(), h.CreateArtist)
@@ -601,6 +602,25 @@ func (h *ContentHandler) ListTracks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *ContentHandler) GetTrack(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "track id is required"})
+		return
+	}
+
+	track, err := h.svc.GetTrackByID(c.Request.Context(), id)
+	if err != nil {
+		if err.Error() == "track not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, track)
 }
 
 func (h *ContentHandler) UpdateTrackHDFSPath(c *gin.Context) {

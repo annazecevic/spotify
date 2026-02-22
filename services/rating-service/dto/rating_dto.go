@@ -3,7 +3,7 @@ package dto
 import "time"
 
 type CreateOrUpdateRatingRequest struct {
-	Value int `json:"value"`
+	Value int `json:"value" binding:"required,min=1,max=5"`
 }
 
 type RatingResponse struct {

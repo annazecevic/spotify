@@ -15,7 +15,7 @@ import (
 type RatingService interface {
 	CreateOrUpdateRating(c *gin.Context, trackID string, value int) (*domain.Rating, error)
 	DeleteRating(c *gin.Context, trackID string) error
-	GetAverageRating(trackID string) (float64, error)
+	GetAverageRating(trackID string) (float64, int64, error)
 	GetUserRating(c *gin.Context, trackID string) (*domain.Rating, error)
 	GetAllRatingsForTrack(trackID string) ([]*domain.Rating, error)
 }
@@ -50,10 +50,6 @@ func (s *ratingService) CreateOrUpdateRating(c *gin.Context, trackID string, val
 	}
 
 	if err := s.validateTrackExists(trackID); err != nil {
-		return nil, err
-	}
-
-	if err := s.validateUserExists(userID); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +123,7 @@ func (s *ratingService) DeleteRating(c *gin.Context, trackID string) error {
 	return nil
 }
 
-func (s *ratingService) GetAverageRating(trackID string) (float64, error) {
+func (s *ratingService) GetAverageRating(trackID string) (float64, int64, error) {
 	return s.repo.GetAverageByTrackID(trackID)
 }
 

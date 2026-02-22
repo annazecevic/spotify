@@ -1,6 +1,6 @@
 module github.com/annazecevic/rating-service
 
-go 1.25.1
+go 1.23
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect

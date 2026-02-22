@@ -112,6 +112,7 @@ services:
       - content-service
       - notifications-service
       - subscriptions-service
+      - rating-service
     networks:
       - spotify-network
 
@@ -177,9 +178,9 @@ services:
     image: mongo:7.0
     container_name: spotify-rating-mongodb
     ports:
-      - "27018:27017"
+      - "27019:27017"
     environment:
-      MONGO_INITDB_DATABASE: spotify_rating
+      MONGO_INITDB_DATABASE: spotify_ratings
     volumes:
       - rating_mongodb_data:/data/db
     networks:
@@ -240,13 +241,13 @@ services:
       dockerfile: Dockerfile
     container_name: spotify-rating-service
     ports:
-      - "8084:8084"
+      - "8085:8085"
     env_file:
       - ./services/rating-service/.env
     environment:
-      MONGO_URI: mongodb://rating-mongodb:27017
+      MONGO_URI: mongodb://ratings-mongodb:27017
       MONGO_DATABASE: spotify_ratings
-      SERVER_PORT: 8084
+      SERVER_PORT: 8085
       ENVIRONMENT: development
       CONTENT_SERVICE_URL: http://content-service:8081
       USER_SERVICE_URL: http://user-service:8080

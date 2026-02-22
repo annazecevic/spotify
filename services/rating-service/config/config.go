@@ -25,9 +25,9 @@ type Config struct {
 
 func LoadConfig() *Config {
 	return &Config{
-		MongoURI:      getEnv("MONGO_URI", "mongodb://rating-mongodb:27017"),
+		MongoURI:      getEnv("MONGO_URI", "mongodb://ratings-mongodb:27017"),
 		MongoDatabase: getEnv("MONGO_DATABASE", "spotify_ratings"),
-		ServerPort:    getEnv("SERVER_PORT", "8084"),
+		ServerPort:    getEnv("SERVER_PORT", "8085"),
 		Environment:   getEnv("ENVIRONMENT", "development"),
 		JWTSecret:     getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
 
