@@ -29,6 +29,7 @@ type ContentService interface {
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
 	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
+	GetTrackByID(ctx context.Context, id string) (*domain.Track, error)
 	GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 	UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error
 }
@@ -137,6 +138,17 @@ func (s *contentService) GetAlbumsByArtistID(ctx context.Context, artistID strin
 
 func (s *contentService) GetTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error) {
 	return s.repo.FindTracksByAlbumID(ctx, albumID)
+}
+
+func (s *contentService) GetTrackByID(ctx context.Context, id string) (*domain.Track, error) {
+	track, err := s.repo.FindTrackByID(ctx, id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.New("track not found")
+		}
+		return nil, err
+	}
+	return track, nil
 }
 
 func (s *contentService) UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error {

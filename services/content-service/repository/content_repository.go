@@ -31,6 +31,7 @@ type ContentRepository interface {
 	CreateTrack(ctx context.Context, t *domain.Track) error
 	ListTracks(ctx context.Context) ([]*domain.Track, error)
 	SearchTracks(ctx context.Context, query string) ([]*domain.Track, error)
+	FindTrackByID(ctx context.Context, id string) (*domain.Track, error)
 	FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error)
 	UpdateTrackHDFSPath(ctx context.Context, trackID string, hdfsPath string) error
 }
@@ -357,6 +358,17 @@ func (r *contentRepository) FindAlbumsByArtistID(ctx context.Context, artistID s
 		out = append(out, &a)
 	}
 	return out, nil
+}
+
+func (r *contentRepository) FindTrackByID(ctx context.Context, id string) (*domain.Track, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var track domain.Track
+	err := r.tracksCol.FindOne(ctx, bson.M{"id": id}).Decode(&track)
+	if err != nil {
+		return nil, err
+	}
+	return &track, nil
 }
 
 func (r *contentRepository) FindTracksByAlbumID(ctx context.Context, albumID string) ([]*domain.Track, error) {
