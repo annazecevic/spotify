@@ -61,6 +61,10 @@ func (p *Publisher) PublishArtistCreated(event ArtistCreatedEvent) error {
 	return p.publish(SubjectArtistCreated, event)
 }
 
+func (p *Publisher) PublishGenreCreated(event GenreCreatedEvent) error {
+	return p.publish(SubjectGenreCreated, event)
+}
+
 func (p *Publisher) publish(subject string, event interface{}) error {
 	data, err := json.Marshal(event)
 	if err != nil {

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,7 +10,9 @@ import (
 
 	"github.com/annazecevic/subscriptions-service/domain"
 	"github.com/annazecevic/subscriptions-service/logger"
+	"github.com/annazecevic/subscriptions-service/messaging"
 	"github.com/annazecevic/subscriptions-service/repository"
+	"github.com/annazecevic/subscriptions-service/resilience"
 	"github.com/google/uuid"
 )
 
@@ -29,13 +32,21 @@ type SubscriptionService interface {
 
 type subscriptionService struct {
 	repo              repository.SubscriptionRepository
+	publisher         *messaging.Publisher
 	contentServiceURL string
+	httpClient *http.Client
+	contentCB *resilience.CircuitBreaker
+	retryCfg resilience.RetryConfig
 }
 
-func NewSubscriptionService(repo repository.SubscriptionRepository, contentServiceURL string) SubscriptionService {
+func NewSubscriptionService(repo repository.SubscriptionRepository, publisher *messaging.Publisher, contentServiceURL string) SubscriptionService {
 	return &subscriptionService{
 		repo:              repo,
+		publisher:         publisher,
 		contentServiceURL: contentServiceURL,
+		httpClient:        resilience.NewHTTPClient(),
+		contentCB:         resilience.NewCircuitBreaker("content-service", 5, 3, 30*time.Second),
+		retryCfg:          resilience.DefaultRetryConfig(),
 	}
 }
 
@@ -73,10 +84,25 @@ func (s *subscriptionService) Subscribe(userID string, subType domain.Subscripti
 		"name", name,
 	))
 
+	if s.publisher != nil {
+		go func() {
+			if err := s.publisher.PublishSubscriptionCreated(messaging.SubscriptionCreatedEvent{
+				UserID:   userID,
+				Type:     string(subType),
+				TargetID: targetID,
+				Name:     name,
+			}); err != nil {
+				logger.Error(logger.EventGeneral, "Failed to publish subscription created event", logger.Fields("error", err.Error()))
+			}
+		}()
+	}
+
 	return subscription, nil
 }
 
 func (s *subscriptionService) Unsubscribe(userID string, subscriptionID string) error {
+	sub, _ := s.repo.GetByID(userID, subscriptionID)
+
 	err := s.repo.Delete(userID, subscriptionID)
 	if err != nil {
 		return err
@@ -86,6 +112,18 @@ func (s *subscriptionService) Unsubscribe(userID string, subscriptionID string) 
 		"user_id", userID,
 		"subscription_id", subscriptionID,
 	))
+
+	if s.publisher != nil && sub != nil {
+		go func() {
+			if err := s.publisher.PublishSubscriptionDeleted(messaging.SubscriptionDeletedEvent{
+				UserID:   userID,
+				Type:     string(sub.Type),
+				TargetID: sub.TargetID,
+			}); err != nil {
+				logger.Error(logger.EventGeneral, "Failed to publish subscription deleted event", logger.Fields("error", err.Error()))
+			}
+		}()
+	}
 
 	return nil
 }
@@ -121,23 +159,33 @@ func (s *subscriptionService) validateAndGetName(subType domain.SubscriptionType
 		return "", fmt.Errorf("invalid subscription type: %s", subType)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	if authToken != "" {
-		req.Header.Set("Authorization", authToken)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error(logger.EventGeneral, "Failed to reach content service", logger.Fields(
-			"url", url,
+	fallback := func(err error) (*http.Response, error) {
+		logger.Warn(logger.EventGeneral, "Content service unavailable, allowing subscription (fallback)", logger.Fields(
+			"target_id", targetID,
 			"error", err.Error(),
 		))
-		return "", fmt.Errorf("content service unavailable, cannot verify target exists")
+		return nil, nil
+	}
+
+	resp, err := resilience.Execute(s.contentCB, s.retryCfg, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		if authToken != "" {
+			req.Header.Set("Authorization", authToken)
+		}
+		return s.httpClient.Do(req)
+	}, fallback)
+
+	if err != nil {
+		return "", nil
+	}
+	if resp == nil {
+		return "", nil
 	}
 	defer resp.Body.Close()
 

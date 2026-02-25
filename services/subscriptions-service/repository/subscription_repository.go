@@ -17,6 +17,7 @@ type SubscriptionRepository interface {
 	GetByUserID(userID string) ([]domain.Subscription, error)
 	GetByUserIDAndType(userID string, subType domain.SubscriptionType) ([]domain.Subscription, error)
 	GetByUserIDAndTarget(userID string, targetID string) (*domain.Subscription, error)
+	GetByID(userID string, subscriptionID string) (*domain.Subscription, error)
 	Delete(userID string, subscriptionID string) error
 	GetSubscribersByTarget(targetID string, subType domain.SubscriptionType) ([]domain.Subscription, error)
 }
@@ -138,6 +139,29 @@ func (r *subscriptionRepository) GetByUserIDAndTarget(userID string, targetID st
 		logger.Error(logger.EventDBError, "Error fetching subscription", logger.Fields(
 			"user_id", userID,
 			"target_id", targetID,
+			"error", err.Error(),
+		))
+		return nil, fmt.Errorf("failed to fetch subscription: %w", err)
+	}
+
+	return &subscription, nil
+}
+
+func (r *subscriptionRepository) GetByID(userID string, subscriptionID string) (*domain.Subscription, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	filter := bson.M{"id": subscriptionID, "user_id": userID}
+
+	var subscription domain.Subscription
+	err := r.collection.FindOne(ctx, filter).Decode(&subscription)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		logger.Error(logger.EventDBError, "Error fetching subscription by ID", logger.Fields(
+			"user_id", userID,
+			"subscription_id", subscriptionID,
 			"error", err.Error(),
 		))
 		return nil, fmt.Errorf("failed to fetch subscription: %w", err)

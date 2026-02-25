@@ -6,6 +6,7 @@ import (
 	"storage-service/hdfs"
 	"storage-service/logger"
 	"storage-service/middleware"
+	"storage-service/resilience"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,6 +65,8 @@ func main() {
 	r := gin.Default()
 
 	r.Use(middleware.RateLimiter())
+
+	r.Use(resilience.TimeoutMiddleware(30 * time.Second))
 
 	public := r.Group("/storage")
 	{
