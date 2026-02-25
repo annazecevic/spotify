@@ -8,7 +8,9 @@ import (
 	"github.com/annazecevic/subscriptions-service/config"
 	"github.com/annazecevic/subscriptions-service/handler"
 	"github.com/annazecevic/subscriptions-service/logger"
+	"github.com/annazecevic/subscriptions-service/messaging"
 	"github.com/annazecevic/subscriptions-service/repository"
+	"github.com/annazecevic/subscriptions-service/resilience"
 	"github.com/annazecevic/subscriptions-service/service"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -59,7 +61,16 @@ func main() {
 	db := client.Database(cfg.MongoDatabase)
 
 	subscriptionRepo := repository.NewSubscriptionRepository(db)
-	subscriptionService := service.NewSubscriptionService(subscriptionRepo, cfg.ContentServiceURL)
+
+	publisher, err := messaging.NewPublisher(cfg.NatsURL)
+	if err != nil {
+		logger.Fatal(logger.EventGeneral, "Failed to connect to NATS", logger.Fields("error", err.Error()))
+	}
+	defer publisher.Close()
+
+	logger.Info(logger.EventGeneral, "Connected to NATS successfully", nil)
+
+	subscriptionService := service.NewSubscriptionService(subscriptionRepo, publisher, cfg.ContentServiceURL)
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 
 	if cfg.Environment == "production" {
@@ -75,6 +86,8 @@ func main() {
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
+
+	router.Use(resilience.TimeoutMiddleware(15 * time.Second))
 
 	subscriptionHandler.RegisterRoutes(router)
 

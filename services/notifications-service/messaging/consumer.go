@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/annazecevic/notifications-service/domain"
 	"github.com/annazecevic/notifications-service/logger"
+	"github.com/annazecevic/notifications-service/resilience"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/nats-io/nats.go"
 )
@@ -17,7 +19,9 @@ type Consumer struct {
 	conn                    *nats.Conn
 	notificationService     service.NotificationService
 	subscriptionsServiceURL string
-	httpClient              *http.Client
+	httpClient *http.Client
+	subscriptionsCB *resilience.CircuitBreaker
+	retryCfg resilience.RetryConfig
 }
 
 func NewConsumer(natsURL string, notifService service.NotificationService, subscriptionsURL string) (*Consumer, error) {
@@ -58,9 +62,9 @@ func NewConsumer(natsURL string, notifService service.NotificationService, subsc
 		conn:                    conn,
 		notificationService:     notifService,
 		subscriptionsServiceURL: subscriptionsURL,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		httpClient:              resilience.NewHTTPClient(),
+		subscriptionsCB:         resilience.NewCircuitBreaker("subscriptions-service", 5, 3, 30*time.Second),
+		retryCfg:                resilience.DefaultRetryConfig(),
 	}, nil
 }
 
@@ -251,9 +255,26 @@ func (c *Consumer) handleArtistCreated(msg *nats.Msg) {
 func (c *Consumer) getSubscribers(targetID string, subType string) ([]Subscriber, error) {
 	url := fmt.Sprintf("%s/api/v1/internal/subscriptions/subscribers/%s?type=%s", c.subscriptionsServiceURL, targetID, subType)
 
-	resp, err := c.httpClient.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call subscriptions service: %w", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	fallback := func(err error) (*http.Response, error) {
+		logger.Warn(logger.EventGeneral, "Subscriptions service unavailable, returning empty subscribers (fallback)", logger.Fields(
+			"target_id", targetID, "type", subType, "error", err.Error(),
+		))
+		return nil, nil
+	}
+
+	resp, err := resilience.Execute(c.subscriptionsCB, c.retryCfg, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		return c.httpClient.Do(req)
+	}, fallback)
+
+	if err != nil || resp == nil {
+		return []Subscriber{}, nil
 	}
 	defer resp.Body.Close()
 

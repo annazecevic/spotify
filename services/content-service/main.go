@@ -12,6 +12,7 @@ import (
 	"github.com/annazecevic/content-service/messaging"
 	"github.com/annazecevic/content-service/middleware"
 	"github.com/annazecevic/content-service/repository"
+	"github.com/annazecevic/content-service/resilience"
 	"github.com/annazecevic/content-service/service"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -72,6 +73,8 @@ func main() {
 	// Validation middleware (2.18)
 	validationMw := middleware.NewValidationMiddleware()
 	r.Use(validationMw.ValidateRequest())
+
+	r.Use(resilience.TimeoutMiddleware(15 * time.Second))
 
 	// Rate limiting (2.17 - DoS protection)
 	rateLimiter := middleware.NewRateLimiter(100, 1*time.Minute)

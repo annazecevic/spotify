@@ -46,7 +46,25 @@ func NewContentService(repo repository.ContentRepository, publisher *messaging.P
 }
 
 func (s *contentService) CreateGenre(ctx context.Context, g *domain.Genre) error {
-	return s.repo.CreateGenre(ctx, g)
+	if err := s.repo.CreateGenre(ctx, g); err != nil {
+		return err
+	}
+
+	if s.publisher != nil {
+		go func() {
+			if err := s.publisher.PublishGenreCreated(messaging.GenreCreatedEvent{
+				GenreID: g.ID,
+				Name:    g.Name,
+			}); err != nil {
+				logger.Error(logger.EventGeneral, "Failed to publish genre created event", logger.Fields(
+					"genre_id", g.ID,
+					"error", err.Error(),
+				))
+			}
+		}()
+	}
+
+	return nil
 }
 
 func (s *contentService) ListGenres(ctx context.Context) ([]*domain.Genre, error) {
@@ -167,6 +185,8 @@ func (s *contentService) CreateTrack(ctx context.Context, t *domain.Track) error
 				Title:     t.Title,
 				ArtistIDs: t.ArtistIDs,
 				AlbumID:   t.AlbumID,
+				Genre:     t.Genre,
+				Duration:  t.Duration,
 			}); err != nil {
 				logger.Error(logger.EventGeneral, "Failed to publish track created event", logger.Fields(
 					"track_id", t.ID,

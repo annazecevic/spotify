@@ -11,6 +11,7 @@ type Config struct {
 	ServerPort    string
 	Environment   string
 	JWTSecret     string
+	NatsURL       string
 
 	UserServiceURL    string
 	ContentServiceURL string
@@ -29,6 +30,7 @@ func LoadConfig() *Config {
 		ServerPort:    getEnv("SERVER_PORT", "8083"),
 		Environment:   getEnv("ENVIRONMENT", "development"),
 		JWTSecret:     getEnv("JWT_SECRET", "your-secret-key-change-in-production"),
+		NatsURL:       getEnv("NATS_URL", "nats://nats:4222"),
 
 		UserServiceURL:    getEnv("USER_SERVICE_URL", "http://user-service:8080"),
 		ContentServiceURL: getEnv("CONTENT_SERVICE_URL", "http://content-service:8081"),

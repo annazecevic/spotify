@@ -9,6 +9,7 @@ import (
 	"github.com/annazecevic/user-service/logger"
 	"github.com/annazecevic/user-service/middleware"
 	"github.com/annazecevic/user-service/repository"
+	"github.com/annazecevic/user-service/resilience"
 	"github.com/annazecevic/user-service/service"
 	"github.com/annazecevic/user-service/utils"
 	"github.com/gin-gonic/gin"
@@ -69,9 +70,7 @@ func main() {
 
 	router := gin.Default()
 
-	// Security headers middleware (2.18 - XSS protection)
 	router.Use(func(c *gin.Context) {
-		// Security headers (2.18)
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
@@ -80,11 +79,11 @@ func main() {
 		c.Next()
 	})
 
-	// Validation middleware (2.18)
 	validationMw := middleware.NewValidationMiddleware()
 	router.Use(validationMw.ValidateRequest())
 
-	// Rate limiter for general endpoints (2.17 - DoS protection)
+	router.Use(resilience.TimeoutMiddleware(15 * time.Second))
+
 	generalRateLimiter := middleware.NewRateLimiter(100, 1*time.Minute)
 	router.Use(generalRateLimiter.Middleware())
 

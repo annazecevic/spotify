@@ -9,6 +9,7 @@ import (
 	"github.com/annazecevic/notifications-service/logger"
 	"github.com/annazecevic/notifications-service/messaging"
 	"github.com/annazecevic/notifications-service/repository"
+	"github.com/annazecevic/notifications-service/resilience"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
@@ -74,6 +75,8 @@ func main() {
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
+
+	router.Use(resilience.TimeoutMiddleware(15 * time.Second))
 
 	notificationHandler.RegisterRoutes(router)
 
