@@ -44,6 +44,8 @@ services:
     env_file:
       - ./services/content-service/.env
     environment:
+      MONGO_URI: mongodb://content-mongodb:27017
+      MONGO_DATABASE: content_db
       ENVIRONMENT: development
       NATS_URL: nats://nats:4222
       LOG_FILE_PATH: /var/log/content-service/app.log
@@ -51,7 +53,7 @@ services:
     volumes:
       - content_service_logs:/var/log/content-service
     depends_on:
-      - mongodb
+      - content-mongodb
       - nats
     networks:
       - spotify-network
@@ -179,6 +181,18 @@ services:
       - ./hadoop.env
     depends_on:
       - namenode
+    networks:
+      - spotify-network
+
+  content-mongodb:
+    image: mongo:7.0
+    container_name: spotify-content-mongodb
+    ports:
+      - "27020:27017"
+    environment:
+      MONGO_INITDB_DATABASE: content_db
+    volumes:
+      - content_mongodb_data:/data/db
     networks:
       - spotify-network
 
@@ -386,6 +400,7 @@ networks:
 
 volumes:
   mongodb_data:
+  content_mongodb_data:
   subscriptions_mongodb_data:
   rating_mongodb_data:
   cassandra_data:
