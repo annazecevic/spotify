@@ -226,10 +226,11 @@ func (s *userService) RequestPasswordReset(ctx context.Context, email string) er
 	}
 
 	if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, resetToken); err != nil {
-		logger.Warn(logger.EventGeneral, "Failed to send password reset email", logger.Fields(
+		logger.Error(logger.EventGeneral, "Failed to send password reset email", logger.Fields(
 			"user_id", user.ID,
 			"error", err.Error(),
 		))
+		return fmt.Errorf("failed to send password reset email: %w", err)
 	}
 
 	return nil
