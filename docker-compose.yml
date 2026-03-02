@@ -44,13 +44,17 @@ services:
     env_file:
       - ./services/content-service/.env
     environment:
+      MONGO_URI: mongodb://content-mongodb:27017
+      MONGO_DATABASE: content_db
       ENVIRONMENT: development
+      NATS_URL: nats://nats:4222
       LOG_FILE_PATH: /var/log/content-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - content_service_logs:/var/log/content-service
     depends_on:
-      - mongodb
+      - content-mongodb
+      - nats
     networks:
       - spotify-network
 
@@ -73,6 +77,21 @@ services:
       timeout: 10s
       retries: 5
 
+  nats:
+    image: nats:2.10-alpine
+    container_name: spotify-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command: ["--http_port", "8222"]
+    networks:
+      - spotify-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:8222/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   notifications-service:
     build:
       context: ./services/notifications-service
@@ -84,12 +103,16 @@ services:
       - ./services/notifications-service/.env
     environment:
       ENVIRONMENT: development
+      NATS_URL: nats://nats:4222
+      SUBSCRIPTIONS_SERVICE_URL: http://subscriptions-service:8083
       LOG_FILE_PATH: /var/log/notifications-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - notifications_service_logs:/var/log/notifications-service
     depends_on:
       cassandra:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     networks:
       - spotify-network
@@ -111,6 +134,7 @@ services:
       - notifications-service
       - subscriptions-service
       - rating-service
+      - recommendation-service
     networks:
       - spotify-network
 
@@ -160,6 +184,18 @@ services:
     networks:
       - spotify-network
 
+  content-mongodb:
+    image: mongo:7.0
+    container_name: spotify-content-mongodb
+    ports:
+      - "27020:27017"
+    environment:
+      MONGO_INITDB_DATABASE: content_db
+    volumes:
+      - content_mongodb_data:/data/db
+    networks:
+      - spotify-network
+
   subscriptions-mongodb:
     image: mongo:7.0
     container_name: spotify-subscriptions-mongodb
@@ -201,12 +237,14 @@ services:
       CONTENT_SERVICE_URL: http://content-service:8081
       USER_SERVICE_URL: http://user-service:8080
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      NATS_URL: nats://nats:4222
       LOG_FILE_PATH: /var/log/subscriptions-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - subscriptions_service_logs:/var/log/subscriptions-service
     depends_on:
       - subscriptions-mongodb
+      - nats
     networks:
       - spotify-network
 
@@ -290,12 +328,69 @@ services:
       CONTENT_SERVICE_URL: http://content-service:8081
       USER_SERVICE_URL: http://user-service:8080
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      NATS_URL: nats://nats:4222
       LOG_FILE_PATH: /var/log/rating-service/app.log
       LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
     volumes:
       - rating_service_logs:/var/log/rating-service
     depends_on:
       - ratings-mongodb
+      - nats
+    networks:
+      - spotify-network
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: spotify-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/spotify_neo4j_pass
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - spotify-network
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p spotify_neo4j_pass 'RETURN 1'"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  recommendation-service:
+    build:
+      context: ./services/recommendation-service
+      dockerfile: Dockerfile
+    container_name: spotify-recommendation-service
+    ports:
+      - "8086:8086"
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: spotify_neo4j_pass
+      SERVER_PORT: 8086
+      ENVIRONMENT: development
+      CONTENT_SERVICE_URL: http://content-service:8081
+      RATING_SERVICE_URL: http://rating-service:8085
+      SUBSCRIPTIONS_SERVICE_URL: http://subscriptions-service:8083
+      NATS_URL: nats://nats:4222
+      LOG_FILE_PATH: /var/log/recommendation-service/app.log
+      LOG_HMAC_KEY: ${LOG_HMAC_KEY:-default-hmac-key-change-in-production}
+    volumes:
+      - recommendation_service_logs:/var/log/recommendation-service
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      nats:
+        condition: service_started
+      content-service:
+        condition: service_started
+      rating-service:
+        condition: service_started
+      subscriptions-service:
+        condition: service_started
     networks:
       - spotify-network
 
@@ -305,6 +400,7 @@ networks:
 
 volumes:
   mongodb_data:
+  content_mongodb_data:
   subscriptions_mongodb_data:
   rating_mongodb_data:
   cassandra_data:
@@ -321,4 +417,7 @@ volumes:
   sonarqube_extensions:
   sonarqube_logs:
   rating_service_logs:
+  neo4j_data:
+  neo4j_logs:
+  recommendation_service_logs:
 

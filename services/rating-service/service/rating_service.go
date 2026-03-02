@@ -1,13 +1,16 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/annazecevic/rating-service/domain"
 	"github.com/annazecevic/rating-service/logger"
+	"github.com/annazecevic/rating-service/messaging"
 	"github.com/annazecevic/rating-service/repository"
+	"github.com/annazecevic/rating-service/resilience"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -22,15 +25,25 @@ type RatingService interface {
 
 type ratingService struct {
 	repo              repository.RatingRepository
+	publisher         *messaging.Publisher
 	contentServiceURL string
 	userServiceURL    string
+	httpClient *http.Client
+	contentCB *resilience.CircuitBreaker
+	userCB    *resilience.CircuitBreaker
+	retryCfg resilience.RetryConfig
 }
 
-func NewRatingService(repo repository.RatingRepository, contentServiceURL string, userServiceURL string) RatingService {
+func NewRatingService(repo repository.RatingRepository, publisher *messaging.Publisher, contentServiceURL string, userServiceURL string) RatingService {
 	return &ratingService{
 		repo:              repo,
+		publisher:         publisher,
 		contentServiceURL: contentServiceURL,
 		userServiceURL:    userServiceURL,
+		httpClient:        resilience.NewHTTPClient(),
+		contentCB:         resilience.NewCircuitBreaker("content-service", 5, 3, 30*time.Second),
+		userCB:            resilience.NewCircuitBreaker("user-service", 5, 3, 30*time.Second),
+		retryCfg:          resilience.DefaultRetryConfig(),
 	}
 }
 
@@ -49,7 +62,7 @@ func (s *ratingService) CreateOrUpdateRating(c *gin.Context, trackID string, val
 		return nil, fmt.Errorf("rating must be between 1 and 5")
 	}
 
-	if err := s.validateTrackExists(trackID); err != nil {
+	if err := s.validateTrackExists(c, trackID); err != nil {
 		return nil, err
 	}
 
@@ -74,6 +87,16 @@ func (s *ratingService) CreateOrUpdateRating(c *gin.Context, trackID string, val
 			"value", value,
 		))
 
+		if s.publisher != nil {
+			go func() {
+				if err := s.publisher.PublishRatingUpdated(messaging.RatingEvent{
+					UserID: userID, TrackID: trackID, Value: value,
+				}); err != nil {
+					logger.Error(logger.EventGeneral, "Failed to publish rating updated event", logger.Fields("error", err.Error()))
+				}
+			}()
+		}
+
 		return existing, nil
 	}
 
@@ -95,6 +118,16 @@ func (s *ratingService) CreateOrUpdateRating(c *gin.Context, trackID string, val
 		"track_id", trackID,
 		"value", value,
 	))
+
+	if s.publisher != nil {
+		go func() {
+			if err := s.publisher.PublishRatingCreated(messaging.RatingEvent{
+				UserID: userID, TrackID: trackID, Value: value,
+			}); err != nil {
+				logger.Error(logger.EventGeneral, "Failed to publish rating created event", logger.Fields("error", err.Error()))
+			}
+		}()
+	}
 
 	return rating, nil
 }
@@ -120,6 +153,16 @@ func (s *ratingService) DeleteRating(c *gin.Context, trackID string) error {
 		"track_id", trackID,
 	))
 
+	if s.publisher != nil {
+		go func() {
+			if err := s.publisher.PublishRatingDeleted(messaging.RatingDeletedEvent{
+				UserID: userID, TrackID: trackID,
+			}); err != nil {
+				logger.Error(logger.EventGeneral, "Failed to publish rating deleted event", logger.Fields("error", err.Error()))
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -140,21 +183,40 @@ func (s *ratingService) GetAllRatingsForTrack(trackID string) ([]*domain.Rating,
 	return s.repo.GetByTrackID(trackID)
 }
 
-func (s *ratingService) validateTrackExists(trackID string) error {
-
+func (s *ratingService) validateTrackExists(c *gin.Context, trackID string) error {
 	url := fmt.Sprintf("%s/content/tracks/%s", s.contentServiceURL, trackID)
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	ctx := c.Request.Context()
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	fallback := func(err error) (*http.Response, error) {
+		logger.Warn(logger.EventGeneral, "Content service unavailable, allowing rating (fallback)", logger.Fields(
+			"track_id", trackID,
+			"error", err.Error(),
+		))
+		return nil, nil
+	}
+
+	resp, err := resilience.Execute(s.contentCB, s.retryCfg, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		return s.httpClient.Do(req)
+	}, fallback)
+
 	if err != nil {
-		return fmt.Errorf("content service unavailable")
+		return nil
+	}
+	if resp == nil {
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("track not found")
 	}
-
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("content service error")
 	}
@@ -162,21 +224,40 @@ func (s *ratingService) validateTrackExists(trackID string) error {
 	return nil
 }
 
-func (s *ratingService) validateUserExists(userID string) error {
-
+func (s *ratingService) validateUserExists(c *gin.Context, userID string) error {
 	url := fmt.Sprintf("%s/users/%s", s.userServiceURL, userID)
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	ctx := c.Request.Context()
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	fallback := func(err error) (*http.Response, error) {
+		logger.Warn(logger.EventGeneral, "User service unavailable, allowing operation (fallback)", logger.Fields(
+			"user_id", userID,
+			"error", err.Error(),
+		))
+		return nil, nil
+	}
+
+	resp, err := resilience.Execute(s.userCB, s.retryCfg, func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		return s.httpClient.Do(req)
+	}, fallback)
+
 	if err != nil {
-		return fmt.Errorf("user service unavailable")
+		return nil
+	}
+	if resp == nil {
+		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("user not found")
 	}
-
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("user service error")
 	}

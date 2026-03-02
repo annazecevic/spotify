@@ -8,7 +8,9 @@ import (
 	"github.com/annazecevic/rating-service/config"
 	"github.com/annazecevic/rating-service/handler"
 	"github.com/annazecevic/rating-service/logger"
+	"github.com/annazecevic/rating-service/messaging"
 	"github.com/annazecevic/rating-service/repository"
+	"github.com/annazecevic/rating-service/resilience"
 	"github.com/annazecevic/rating-service/service"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -60,7 +62,16 @@ func main() {
 	db := client.Database(cfg.MongoDatabase)
 
 	ratingRepo := repository.NewRatingRepository(db)
-	ratingService := service.NewRatingService(ratingRepo, cfg.ContentServiceURL, cfg.UserServiceURL)
+
+	publisher, err := messaging.NewPublisher(cfg.NatsURL)
+	if err != nil {
+		logger.Fatal(logger.EventGeneral, "Failed to connect to NATS", logger.Fields("error", err.Error()))
+	}
+	defer publisher.Close()
+
+	logger.Info(logger.EventGeneral, "Connected to NATS successfully", nil)
+
+	ratingService := service.NewRatingService(ratingRepo, publisher, cfg.ContentServiceURL, cfg.UserServiceURL)
 	ratingHandler := handler.NewRatingHandler(ratingService)
 
 	if cfg.Environment == "production" {
@@ -76,6 +87,8 @@ func main() {
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
+
+	router.Use(resilience.TimeoutMiddleware(15 * time.Second))
 
 	ratingHandler.RegisterRoutes(router)
 

@@ -2,12 +2,7 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod ./
-RUN go mod download
-
 COPY . .
-
-# Resolve new dependencies added to go.mod
 RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o rating-service .

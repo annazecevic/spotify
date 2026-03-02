@@ -7,7 +7,9 @@ import (
 	"github.com/annazecevic/notifications-service/config"
 	"github.com/annazecevic/notifications-service/handler"
 	"github.com/annazecevic/notifications-service/logger"
+	"github.com/annazecevic/notifications-service/messaging"
 	"github.com/annazecevic/notifications-service/repository"
+	"github.com/annazecevic/notifications-service/resilience"
 	"github.com/annazecevic/notifications-service/service"
 	"github.com/gin-gonic/gin"
 	"github.com/gocql/gocql"
@@ -49,6 +51,18 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo)
 	notificationHandler := handler.NewNotificationHandler(notificationService)
 
+	consumer, err := messaging.NewConsumer(cfg.NatsURL, notificationService, cfg.SubscriptionsServiceURL)
+	if err != nil {
+		logger.Fatal(logger.EventGeneral, "Failed to connect to NATS", logger.Fields("error", err.Error()))
+	}
+	defer consumer.Close()
+
+	if err := consumer.Start(); err != nil {
+		logger.Fatal(logger.EventGeneral, "Failed to start NATS consumer", logger.Fields("error", err.Error()))
+	}
+
+	logger.Info(logger.EventGeneral, "NATS consumer started, listening for content events", nil)
+
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -61,6 +75,8 @@ func main() {
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Next()
 	})
+
+	router.Use(resilience.TimeoutMiddleware(15 * time.Second))
 
 	notificationHandler.RegisterRoutes(router)
 
